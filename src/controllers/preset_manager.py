@@ -1,3 +1,8 @@
+# PEP 810: defer operation-only dependencies on Python 3.15+; eager on older Python.
+__lazy_modules__ = (
+    "src.tweaks.status_bar.status_bar_c.status_setter",
+)
+
 import base64
 import json
 import os
@@ -223,19 +228,6 @@ class PresetManager:
             print(f"Failed to export preset: {e}")
             return False
 
-    def build_export_data(self, include: Optional[list] = None) -> Optional[dict]:
-        """Serialize the *current* tweak state, optionally limited to a subset.
-
-        ``include`` is a list of ``TweakID`` members (or ``.name`` strings).
-        Returns ``None`` if nothing was serialized.
-        """
-        data = self._serialize_subset(include)
-        if data is None:
-            return None
-        data["exported"] = True
-        data["exported_at"] = int(time.time())
-        return data
-
     @staticmethod
     def _filter_export(data: dict, include: list) -> dict:
         """Return a copy of *data* with ``tweaks`` reduced to ``include``
@@ -316,12 +308,12 @@ class PresetManager:
             if owned_assets is not None and not committed:
                 shutil.rmtree(owned_assets, ignore_errors=True)
 
-    def _store_imported(self, data: dict, new_name: str) -> str:
+    def _store_imported(self, data: dict, new_name: str, replace: bool = False) -> str:
         """Write validated preset ``data`` under a unique name; return the name."""
         base_name = self._sanitize_name(new_name)
         name = base_name
         counter = 1
-        while os.path.isfile(self.get_preset_path(name)):
+        while not replace and os.path.isfile(self.get_preset_path(name)):
             name = f"{base_name} {counter}"
             counter += 1
 
@@ -369,13 +361,20 @@ class PresetManager:
         from src.controllers.share_code import decode
         return decode(text, self._valid_import_structure)
 
-    def import_share_code(self, text: str, new_name: str = "") -> str:
-        """Store a shared setup as a new preset (never activates it); return its name."""
+    def import_share_code(self, text: str, new_name: str = "", catalog: dict = None,
+                          replace: bool = False) -> str:
+        """Store a shared setup as a new preset (never activates it); return its name.
+
+        ``catalog`` ({"id", "sha256"}) marks a preset imported from the community
+        catalog so a newer version can be offered; ``replace`` overwrites the
+        preset named ``new_name`` instead of picking a free name (an update)."""
         data = self.decode_share_code(text)
         name = new_name or data["metadata"].pop("name", "") or "Shared Preset"
         data["metadata"].pop("name", None)
         data.pop("shared_count", None)
-        return self._store_imported(data, name)
+        if catalog:
+            data["metadata"]["catalog"] = dict(catalog)
+        return self._store_imported(data, name, replace=replace)
 
     @staticmethod
     def _valid_import_structure(data) -> bool:
@@ -408,6 +407,9 @@ class PresetManager:
                     return False
             if "templates" in entry and (not isinstance(entry["templates"], list)
                                           or not all(isinstance(path, str) for path in entry["templates"])):
+                return False
+            if "tweak_states" in entry and (not isinstance(entry["tweak_states"], list)
+                                            or not all(isinstance(state, dict) for state in entry["tweak_states"])):
                 return False
             if "themes" in entry:
                 if not isinstance(entry["themes"], list):
@@ -452,6 +454,9 @@ class PresetManager:
             data["value"] = tweak.value
         elif isinstance(tweak, TemplatesTweak):
             data["templates"] = [t.path for t in tweak.templates]
+            states = tweak.tweak_states()
+            if any(states):
+                data["tweak_states"] = states
         elif isinstance(tweak, StatusBarTweak):
             data["enabled"] = tweak.enabled
             data["silly_mode"] = tweak.setter.silly_mode
@@ -544,6 +549,7 @@ class PresetManager:
                         tweak.add_template(path)
                     except Exception as e:
                         print(f"Failed to add template: {e}")
+            tweak.restore_tweak_states(data.get("tweak_states"), data["templates"])
 
     def _apply_status_bar(self, tweak: StatusBarTweak, data: dict):
         tweak.enabled = data.get("enabled", False)

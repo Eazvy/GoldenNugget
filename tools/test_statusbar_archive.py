@@ -239,7 +239,12 @@ def test_badge_and_bars_round_trip():
     check("secondary name/badge/bars", got["secondary"] == ("Telkomsel", "S", 1),
           got["secondary"])
 
+<<<<<<< HEAD
     # Defaults: name set, no badge, no bars.
+=======
+    # Defaults: name set, no badge, no bars. SpringBoard replaces the whole
+    # live entry, so a name-only override must not pin a full signal.
+>>>>>>> 7109fcf372e464a8a9daa572b57a343cfa1c030a
     got = carrier_overrides(build_archive("Mango"))
     check("default badge is unset", got["primary"][1] is None, got["primary"])
     check("default bars are 0", got["primary"][2] == 0, got["primary"])
