@@ -14,9 +14,24 @@ Two independent causes are pinned here:
    checking the result against ``st_size``, so a short read was written out as
    a truncated file and reported as a success.
 
+A third cause is pinned by ``test_drop_decision`` / ``test_walk_records_what_is_there``
+/ ``test_call_sites_use_the_plan``: the decision to drop the media trees from
+the backup was made from the *preference flag*, while the evidence (the AFC
+walk) lived inside the parallel pull. A run that enumerated 0 files therefore
+dropped nothing but still left an unverifiable store, and the pre-wipe gate
+blocked the apply — surfacing as a "Not Enough Disk Space" dialog (the gate's
+message happened to contain the words "disk space") on a computer with 200 GB
+free. The drop decision is now made once, from the walk, before the backup.
+
+A fourth, same-shaped instance is pinned by ``test_cache_fast_path``: the
+experimental backup cache reused a master with no device session and derived its
+media source from the live preference, so flipping the setting off between two
+applies made a master that had dropped the photos look like one that never did.
+
 Exercises: the ``.media_state.json`` verification marker, invalidation on
-failure/cancellation, atomic + size-checked pull, the pre-apply gate, and the
-push side (no host bookkeeping pushed, short writes detected).
+failure/cancellation, atomic + size-checked pull, the pre-apply gate, the push
+side (no host bookkeeping pushed, short writes detected), and the evidence-based
+drop decision with the single source of truth it feeds.
 
 Run: python tools/test_afc_media_safety.py
 """
@@ -31,8 +46,10 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.devicemanagement.device_manager import DeviceManager
-from src.exceptions.nugget_exception import NuggetException
+from src.exceptions.nugget_exception import MediaNotBackedUpError, NuggetException
 from src.restore import afc_media
+from src.restore import protective as protective_mod
+from src.restore import protective_cache as protective_cache_mod
 from src.restore.afc_media import (
     MEDIA_STATE_FILE,
     _invalidate_media_state,
@@ -364,6 +381,43 @@ def test_pre_apply_gate():
 
 
 # =============================================================================
+def test_cache_fast_path():
+    print("\nthe cached master is trusted for what IT did, not for the setting")
+    reusable = protective_cache_mod.cache_master_reusable
+    state = protective_cache_mod.cache_media_state
+
+    moved = {"media_afc": True}
+    kept = {"media_afc": False}
+    legacy = {"created_ts": 1}          # written before the flag existed
+
+    check("a master that dropped the photos, store intact -> reusable",
+          reusable(moved, True) is True)
+    check("...unverified store -> refresh instead (which re-pulls them)",
+          reusable(moved, False) is False)
+    check("a master that kept them inside needs no store at all",
+          reusable(kept, False) is True)
+    check("a master with no record is never assumed safe",
+          reusable(legacy, True) is False)
+    check("unknown is not the same answer as 'kept the media'",
+          state(legacy) is None and state(kept) is False and state(moved) is True)
+
+    # the hole this closes: master dropped the photos, user then switched the
+    # AFC channel off. Reading the preference would make this master look as if
+    # it never dropped anything -> empty media source -> nothing pushed back.
+    check("switching the channel off cannot un-drop a master's photos",
+          reusable(moved, True) is True)
+
+    dm = inspect.getsource(sys.modules["src.devicemanagement.device_manager"])
+    check("the fast path no longer decides from the live preference",
+          "media_moved = bool(use_afc_media and store_verified)" not in dm)
+    check("...it asks the master's own record through the cache policy",
+          "cache_master_reusable(master_info, store_verified)" in dm)
+    check("...and takes the reuse decision from that, not from a pref-shaped flag",
+          "and found[\"age_secs\"] < CACHE_REFRESH_SECS and master_reusable" in dm
+          and "media_ready" not in dm)
+
+
+# =============================================================================
 def test_restore_call_sites():
     print("\nrestore/worker call sites no longer fail silently")
     src = inspect.getsource(restore_mod)
@@ -575,12 +629,217 @@ def test_afc_open_retry():
 
 
 
+# =============================================================================
+# The drop decision: evidence first, then one answer for every consumer.
+#
+# The regression this pins: the upload filter dropped the media trees whenever
+# the *preference* was on, while the evidence (the AFC walk) only existed
+# inside the parallel pull. A run that enumerated nothing still dropped
+# nothing yet left an unverifiable store, and the pre-wipe gate then blocked
+# the apply behind a fatal dialog. It must not be possible to be "dropped from
+# the backup AND not provably copied locally" at the same time.
+def test_drop_decision():
+    print("\nthe media drop decision is made from the walk, not the preference")
+    entry = ("/DCIM/100APPLE/IMG_0001.JPG", "DCIM/100APPLE/IMG_0001.JPG",
+             {"st_size": 100, "st_ifmt": "S_IFREG"})
+
+    nothing = afc_media.plan_media_backup(afc_media.MediaListing())
+    check("a walk that sees nothing keeps the media in the backup",
+          nothing.exclude_from_backup is False)
+    check("...and carries no entries to pull", nothing.entries == ())
+    check("...and says why", "stay in the mobilebackup2 backup" in nothing.reason,
+          nothing.reason[:64])
+
+    absent = afc_media.plan_media_backup(
+        afc_media.MediaListing((), {}, ("DCIM",)))
+    check("an unexposed tree is named in the reason",
+          "does not expose DCIM" in absent.reason, absent.reason[:64])
+
+    some = afc_media.plan_media_backup(
+        afc_media.MediaListing((entry,), {"DCIM": 1}, ()))
+    check("an enumerated tree may leave the backup", some.exclude_from_backup is True)
+    check("...and the pull carries exactly what was enumerated",
+          some.entries == (entry,))
+    check("a disabled channel plans no drop, with no device session at all",
+          asyncio.run(afc_media.build_media_plan(None, enabled=False))
+          .exclude_from_backup is False)
+
+    # media_source_for is the ONE place the gate, the Phase 5 push and the
+    # prune ask "where are the photos this run?". '' == they are in the backup.
+    plan_store = store("plan_store")
+    check("nothing enumerated -> the photos live in the backup",
+          afc_media.media_source_for(nothing, plan_store) == "")
+    check("enumerated -> the store is the source",
+          afc_media.media_source_for(some, plan_store) == plan_store)
+    # the cache fast path holds the decision as a bool (it reads the store
+    # marker instead of walking the device), so the rule is also reachable
+    # without a plan — with the same answer.
+    check("the plain-bool form of the rule agrees with the plan form",
+          afc_media.media_store_dir(True, plan_store) == plan_store
+          and afc_media.media_store_dir(False, plan_store) == ""
+          and afc_media.media_store_dir(
+              some.exclude_from_backup, plan_store) == plan_store)
+
+    # the reported failure: an unverified (0-file) store, one device, and the
+    # answer depending on whether the media was actually taken out of the backup
+    zero = store("plan_zero_store")
+    os.makedirs(zero)
+    _write_media_state(zero, files=0, bytes_=0, skipped=0)
+    check("the 0-file store is unverified to begin with",
+          not media_store_verified(zero))
+
+    class Prepared:
+        def __init__(self, media_src):
+            self.media_src = media_src
+
+    def gate(media_src):
+        try:
+            DeviceManager._require_media_copy(Prepared(media_src))
+            return True, None
+        except Exception as e:                        # noqa: BLE001 - the gate's contract
+            return False, e
+
+    ok, _exc = gate(afc_media.media_source_for(nothing, zero))
+    check("nothing enumerated -> media rides the backup -> gate stays out of it",
+          ok)
+    ok, exc = gate(afc_media.media_source_for(some, zero))
+    check("the SAME store still blocks once the media really was dropped", not ok)
+    check("...typed as a media failure, not a disk one",
+          isinstance(exc, MediaNotBackedUpError), type(exc).__name__)
+    check("...and no longer tells the user to free up disk space",
+          "disk space" not in str(exc).lower(), str(exc)[:72])
+
+
+# =============================================================================
+def test_walk_records_what_is_there():
+    print("\nthe AFC walk records what the device really exposes")
+    files = {"/DCIM/100APPLE/IMG_0001.JPG": b"j" * 100,
+             "/DCIM/100APPLE/IMG_0002.JPG": b"j" * 200}
+
+    class CountingAfc(FakeAfc):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self.listdirs = []
+
+        async def listdir(self, path):
+            self.listdirs.append(path)
+            return await super().listdir(path)
+
+    walked = CountingAfc(files)
+    listing = use_afc(walked, lambda: asyncio.run(
+        afc_media.list_media_entries(None)))
+    check("per-tree counts come back", listing.tree_counts == {"DCIM": 2},
+          listing.tree_counts)
+    check("a tree the root does not expose is named",
+          listing.trees_absent == ("PhotoStreamsData",), listing.trees_absent)
+    check("the walk lists the root exactly once", walked.listdirs.count("/") == 1,
+          walked.listdirs)
+    check("the plan built from it drops the trees",
+          afc_media.plan_media_backup(listing).exclude_from_backup)
+
+    streams = use_afc(FakeAfc({"/PhotoStreamsData/p.JPG": b"p" * 10}),
+                      lambda: asyncio.run(afc_media.list_media_entries(None)))
+    check("PhotoStreamsData is walked as well", streams.total_files == 1)
+    check("a missing DCIM is reported, not silently 'empty'",
+          streams.trees_absent == ("DCIM",), streams.trees_absent)
+
+    # the run shape that produced the false alarm: nothing enumerated at all
+    blind = use_afc(FakeAfc({"/PhotoData/x.db": b"d" * 10}),
+                    lambda: asyncio.run(afc_media.list_media_entries(None)))
+    check("a device with no media trees enumerates 0 files",
+          blind.total_files == 0 and blind.trees_absent == ("DCIM", "PhotoStreamsData"),
+          f"{blind.total_files} {blind.trees_absent}")
+    check("...so the plan keeps the media inside the backup",
+          afc_media.plan_media_backup(blind).exclude_from_backup is False)
+
+    class BlindAfc(FakeAfc):
+        async def listdir(self, path):
+            if path == "/":
+                raise RuntimeError("PERM_DENIED")
+            return await super().listdir(path)
+
+    def unlistable():
+        try:
+            use_afc(BlindAfc(files), lambda: asyncio.run(
+                afc_media.list_media_entries(None)))
+            return "no exception"
+        except NuggetException as e:
+            return str(e)
+
+    msg = unlistable()
+    check("an unlistable media root fails loudly instead of meaning '0 files'",
+          msg != "no exception" and "could not list" in msg, msg[:64])
+
+    # the invariant the whole change exists for: dropped => verifiable
+    done = store("plan_pull")
+    os.makedirs(done)
+    plan = afc_media.plan_media_backup(listing)
+    handed = CountingAfc(files)
+    tally = use_afc(handed, lambda: asyncio.run(
+        afc_media.backup_media_via_afc(None, done, entries=plan.entries)))
+    check("a handed-in listing is not walked a second time", handed.listdirs == [],
+          handed.listdirs)
+    check("the pull moved the files the plan enumerated", tally["files"] == 2, tally)
+    check("dropped => the store ends up verified", media_store_verified(done))
+    check("...with the enumerated count in the marker, never 0",
+          int(media_store_state(done)["files"]) == 2)
+
+
+# =============================================================================
+def test_call_sites_use_the_plan():
+    print("\nthe one decision reaches every consumer")
+    src = inspect.getsource(protective_mod)
+    check("the upload filter drops on the plan, not on the preference",
+          "exclude_afc_media_trees=drop_media_trees" in src)
+    check("the preference flag no longer drives the filter",
+          "exclude_afc_media_trees=include_afc_media" not in src)
+    check("the drop flag comes from the plan",
+          "drop_media_trees = media_plan.exclude_from_backup" in src)
+    check("an empty walk is logged, not silently dropped",
+          'log_warn(f"AFC media: {media_plan.reason}")' in src)
+    check("the host disk check has its own type",
+          "raise DiskSpaceError(" in src)
+
+    dm = inspect.getsource(sys.modules["src.devicemanagement.device_manager"])
+    check("the pre-wipe gate raises a typed failure",
+          "raise MediaNotBackedUpError(" in dm)
+    check("no failure is classified by searching its message for 'disk space'",
+          '"disk space" in str(e)' not in dm)
+    check("the live path derives media_src from the plan",
+          "media_src = media_source_for(media_plan, afc_media_dir_for(backup_root))" in dm)
+    check("the cache path derives it from the same rule",
+          "media_src = media_store_dir(media_moved, str(cache.media_dir))" in dm)
+    check("...and nothing else in the file invents a third answer",
+          dm.count("media_src = media_") == 2, dm.count("media_src = media_"))
+    check("the media failure gets its own dialog",
+          "Photos Not Fully Backed Up" in dm)
+    check("...and only the three typed failures get a dialog",
+          "(MediaNotBackedUpError, DiskSpaceError, NotEnoughDiskSpaceError)" in dm)
+
+    cache = inspect.getsource(protective_cache_mod)
+    check("the persisted media_afc flag records what the run did",
+          '"media_afc": media_moved' in cache)
+    check("...not the raw preference", '"media_afc": include_afc_media' not in cache)
+    check("the cache path can build its own plan",
+          "afc_media_plan = await build_media_plan(" in cache)
+
+    rs = inspect.getsource(restore_mod)
+    check("the live Phase 1 backup takes the plan too",
+          "afc_media_plan=afc_media_plan" in rs)
+    check("media_dir follows the plan, not the flag",
+          "media_source_for(afc_media_plan, afc_media_dir_for(backup_root))" in rs)
+
+
 def main():
     test_marker_gate()
     test_pull()
     test_pull_one()
     test_push()
     test_pre_apply_gate()
+    test_drop_decision()
+    test_walk_records_what_is_there()
+    test_call_sites_use_the_plan()
+    test_cache_fast_path()
     test_restore_call_sites()
     test_afc_open_retry()
     shutil.rmtree(TMP, ignore_errors=True)

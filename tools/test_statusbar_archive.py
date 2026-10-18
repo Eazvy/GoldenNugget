@@ -101,6 +101,12 @@ def test_cellular_entry_shape():
               item["string"].data == item["crossfadeString"].data)
         check(f"{label} no badge", objects[item["badgeString"].data] == "$null")
         check(f"{label} no suffix", objects[item["suffixString"].data] == "$null")
+        # The merge replaces the whole live entry, so a name-only override
+        # must not fabricate a network type or a bar count (regression:
+        # type 10 pinned a "5G" indicator and displayValue 4 pinned full
+        # signal onto every carrier-name change).
+        check(f"{label} no network type pinned", item["type"] == 0, item["type"])
+        check(f"{label} no bars pinned", item["displayValue"] == 0, item["displayValue"])
 
     check("both entries share one class definition",
           entry["$class"].data == secondary["$class"].data)
@@ -233,10 +239,10 @@ def test_badge_and_bars_round_trip():
     check("secondary name/badge/bars", got["secondary"] == ("Telkomsel", "S", 1),
           got["secondary"])
 
-    # Defaults: name set, no badge, four bars.
+    # Defaults: name set, no badge, no bars.
     got = carrier_overrides(build_archive("Mango"))
     check("default badge is unset", got["primary"][1] is None, got["primary"])
-    check("default bars are 4", got["primary"][2] == 4, got["primary"])
+    check("default bars are 0", got["primary"][2] == 0, got["primary"])
 
     # The badge is a separate string object referenced only by badgeString.
     data, objects = status_bar_data(build_archive("Mango", None, "P"))
@@ -268,10 +274,11 @@ def test_badge_and_bars_are_sanitised():
     check("bars clamp low", carrier_overrides(
         build_archive("Mango", None, None, None, -5))["primary"][2] == 0)
 
-    # Junk falls back to the verified default instead of raising or writing 0.
+    # Junk falls back to the neutral default instead of raising or inventing
+    # a bar count.
     for junk in ("x", None, object()):
         got = carrier_overrides(build_archive("Mango", None, None, None, junk))
-        check("junk bars fall back to 4", got["primary"][2] == 4, repr(junk))
+        check("junk bars fall back to 0", got["primary"][2] == 0, repr(junk))
 
 
 def test_tweak_passes_badge_and_bars_to_the_archive():
