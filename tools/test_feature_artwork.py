@@ -31,6 +31,30 @@ class FeatureArtwork(unittest.TestCase):
         self.assertEqual(open_url.call_args.args[0].toString(),
                          'https://discord.com/users/1196529222617923660')
 
+    def test_translation_credit_groups_avatars_under_one_heading(self):
+        from src.gui.ios.support_panel import SupportPanel
+        from PySide6.QtWidgets import QPushButton
+        with patch('src.gui.ios.support_panel.ContributorMedia.instance') as media:
+            panel = SupportPanel()
+            panel._load_translation_contributors(True)
+            ready = media.return_value.contributors.call_args.args[1]
+            ready(['awesomenull-dev', 'kik4311', 'Wind0ws11Aero'], True)
+        self.assertEqual(panel._translation_grid.count(), 3)
+        headings = [button for button in panel.findChildren(QPushButton)
+                    if button.text() == 'Translations']
+        self.assertEqual(len(headings), 1)
+        self.assertTrue(panel._translation_status.isHidden())
+
+    def test_contributor_name_uses_theme_button_instead_of_html_link(self):
+        from src.gui.ios.support_panel import SupportPanel
+        from PySide6.QtWidgets import QPushButton
+        with patch('src.gui.ios.support_panel.ContributorMedia.instance'):
+            entry = SupportPanel._credit('Wallpaper Website', 'SerStars',
+                                         'https://cowabun.ga/wallpapers')
+        name = entry.findChild(QPushButton, 'supportCreditLink')
+        self.assertEqual(name.text(), 'SerStars')
+        self.assertIn('supportCreditLink', entry.styleSheet())
+
     def test_passcode_artwork_uses_requested_size(self):
         home = SimpleNamespace(_c=SimpleNamespace(text_primary='#ffffff'),
                                devicePixelRatioF=lambda: 1)

@@ -5,7 +5,8 @@ from PySide6.QtWidgets import (
     QPushButton, QToolButton, QSizePolicy,
 )
 
-from src.gui.credits import CREDITS, CREDIT_AVATARS
+from src.gui.credits import CREDITS, CREDIT_AVATARS, CREDIT_AVATAR_SOURCES
+from src.gui.ios.contributor_media import ContributorMedia, TRANSLATIONS_REPOSITORY
 from src.gui.widgets import (
     IOSCard, IOSCollapsibleSection,
 )
@@ -14,6 +15,22 @@ from src.gui.theme import ColorThemeManager, theme_pixmap, t
 
 def _tr(text):
     return QCoreApplication.translate("SupportPanel", text)
+
+
+class ContributorCredit(QWidget):
+    def __init__(self):
+        super().__init__()
+        ColorThemeManager.instance().theme_changed.connect(self._retheme)
+        self._retheme()
+
+    def _retheme(self):
+        colors = ColorThemeManager.instance().colors
+        self.setStyleSheet(t('support_panel') + f"""
+            QPushButton#supportCreditLink {{ background:transparent; border:none;
+                color:{colors.text_primary}; font-size:13px; text-align:left; padding:0; }}
+            QPushButton#supportCreditLink:hover {{ color:{colors.accent}; }}
+            QToolButton#supportAvatar {{ color:{colors.text_secondary}; font-size:18px; }}
+        """)
 
 
 class SupportPanel(IOSCard):
@@ -46,11 +63,34 @@ class SupportPanel(IOSCard):
         grid = QGridLayout()
         grid.setHorizontalSpacing(24)
         grid.setVerticalSpacing(16)
-        for index, (role, name, url) in enumerate(CREDITS[len(portraits):]):
+        acknowledgements = [credit for credit in CREDITS[len(portraits):]
+                            if credit[0] not in ('Translations', 'Legacy Translations')]
+        for index, (role, name, url) in enumerate(acknowledgements):
             grid.addWidget(self._credit(role, name, url), index // 2, index % 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         credits.body_layout.addLayout(grid)
+        self._translation_group = ContributorCredit()
+        translation_layout = QVBoxLayout(self._translation_group)
+        translation_layout.setContentsMargins(0, 10, 0, 0)
+        translation_layout.setSpacing(8)
+        heading = QPushButton(_tr('Translations'))
+        heading.setObjectName('supportCreditLink')
+        heading.setCursor(Qt.PointingHandCursor)
+        heading.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
+            f'https://github.com/{TRANSLATIONS_REPOSITORY}/graphs/contributors')))
+        translation_layout.addWidget(heading, 0, Qt.AlignLeft)
+        self._translation_status = QLabel(_tr('Open this section to load contributors.'))
+        self._translation_status.setObjectName('supportMuted')
+        self._translation_status.setWordWrap(True)
+        translation_layout.addWidget(self._translation_status)
+        self._translation_grid = QGridLayout()
+        self._translation_grid.setSpacing(8)
+        self._translation_grid.setAlignment(Qt.AlignLeft)
+        translation_layout.addLayout(self._translation_grid)
+        credits.body_layout.addWidget(self._translation_group)
+        self._translations_started = False
+        credits.toggled.connect(self._load_translation_contributors)
         layout.addWidget(credits)
         self._retheme()
 
@@ -70,6 +110,7 @@ class SupportPanel(IOSCard):
         avatar.setAccessibleName(f'{name} · {role}')
         avatar.setCursor(Qt.PointingHandCursor)
         avatar.clicked.connect(lambda _, link=url: QDesktopServices.openUrl(QUrl(link)))
+        ContributorMedia.instance().avatar(avatar, url, self._set_remote_portrait)
         column.addWidget(avatar, 0, Qt.AlignHCenter)
         name_button = QPushButton(name)
         name_button.setObjectName('supportName')
@@ -86,36 +127,91 @@ class SupportPanel(IOSCard):
 
     @staticmethod
     def _credit(role, name, url):
-        entry = QWidget()
+        entry = ContributorCredit()
         row = QHBoxLayout(entry)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(12)
-        portrait = CREDIT_AVATARS.get(url)
-        if portrait:
-            avatar = QToolButton(entry)
-            avatar.setObjectName('supportAvatar')
-            avatar.setFixedSize(52, 52)
-            avatar.setIconSize(QSize(48, 48))
-            avatar.setIcon(QIcon(SupportPanel._portrait(portrait)))
-            avatar.setAccessibleName(f'{name} · {role}')
-            avatar.setToolTip(f'{name} · {role}')
-            avatar.setCursor(Qt.PointingHandCursor)
-            avatar.clicked.connect(lambda _, link=url: QDesktopServices.openUrl(QUrl(link)))
-            row.addWidget(avatar)
+        if role == 'PosterBoard Help':
+            from pathlib import Path
+            icon = QLabel(entry)
+            icon.setFixedSize(52, 52)
+            icon.setStyleSheet('background:#f4a4ce; border:2px solid #ed78b5; border-radius:26px;')
+            image = QPixmap(str(Path(__file__).resolve().parents[2] / 'qt' / 'credits' / 'posterboard-help.png'))
+            icon.setPixmap(image.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            icon.setAlignment(Qt.AlignCenter)
+            icon.setToolTip(_tr(role))
+            row.addWidget(icon)
+        else:
+            row.addWidget(SupportPanel._avatar_button(name, url, entry, role))
         column = QVBoxLayout()
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(4)
+        column.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         row.addLayout(column, 1)
         label = QLabel(_tr(role))
         label.setObjectName('supportMuted')
         column.addWidget(label)
-        link = QLabel(f'<a href="{url}">{_tr(name)}</a>')
-        link.setObjectName('supportCredit')
-        link.setWordWrap(True)
-        link.setOpenExternalLinks(True)
-        column.addWidget(link)
+        link = QPushButton(name)
+        link.setObjectName('supportCreditLink')
+        link.setCursor(Qt.PointingHandCursor)
+        link.setToolTip(name)
+        link.clicked.connect(lambda _, target=url: QDesktopServices.openUrl(QUrl(target)))
+        column.addWidget(link, 0, Qt.AlignLeft)
         return entry
 
+
+    @staticmethod
+    def _avatar_button(name, url, parent, role='Translations'):
+        portrait = CREDIT_AVATARS.get(url)
+        avatar = QToolButton(parent)
+        avatar.setObjectName('supportAvatar')
+        avatar.setFixedSize(52, 52)
+        avatar.setIconSize(QSize(48, 48))
+        if portrait:
+            avatar.setIcon(QIcon(SupportPanel._portrait(portrait)))
+        elif url.startswith(('https://discord.gg/', 'https://discord.com/invite/')):
+            avatar.setIcon(QIcon(theme_pixmap(':/icon/discord.svg', '#5865F2', 48, avatar.devicePixelRatioF())))
+        else:
+            avatar.setText(name[:1].upper())
+        ContributorMedia.instance().avatar(
+            avatar, CREDIT_AVATAR_SOURCES.get(url, url), SupportPanel._set_remote_portrait)
+        avatar.setAccessibleName(f'{name} · {role}')
+        avatar.setToolTip(name)
+        avatar.setCursor(Qt.PointingHandCursor)
+        avatar.clicked.connect(lambda _, target=url: QDesktopServices.openUrl(QUrl(target)))
+        return avatar
+
+    def _load_translation_contributors(self, expanded):
+        if not expanded or self._translations_started:
+            return
+        self._translations_started = True
+        self._translation_status.setText(_tr('Loading translation contributors…'))
+        import weakref
+        from shiboken6 import isValid
+        target = weakref.ref(self)
+
+        def ready(people, complete):
+            panel = target()
+            if panel is None or not isValid(panel):
+                return
+            if not people:
+                panel._translation_status.setText(_tr('Unable to load translation contributors. Open the linked repository to see everyone.'))
+                panel._translations_started = False
+                return
+            panel._translation_status.setVisible(not complete)
+            panel._translation_status.setText(_tr('Some contributors could not be loaded.'))
+            for index, login in enumerate(people):
+                panel._translation_grid.addWidget(
+                    panel._avatar_button(login, f'https://github.com/{login}', panel._translation_group),
+                    index // 12, index % 12)
+        ContributorMedia.instance().contributors(TRANSLATIONS_REPOSITORY, ready)
+
+    @staticmethod
+    def _set_remote_portrait(button, data):
+        image = QPixmap()
+        if image.loadFromData(data):
+            button.setText('')
+            button.setIcon(QIcon(SupportPanel._portrait(image)))
 
     @staticmethod
     def _portrait(resource):
@@ -136,6 +232,9 @@ class SupportPanel(IOSCard):
     def _retheme(self):
         super()._retheme()
         self.setStyleSheet(self.styleSheet() + t("support_panel"))
+        if hasattr(self, '_translation_status'):
+            colors = ColorThemeManager.instance().colors
+            self._translation_status.setStyleSheet(f'color:{colors.text_secondary}; font-size:13px; background:transparent;')
 
 
 class CommunityLinks(QWidget):
