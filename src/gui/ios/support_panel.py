@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 from src.gui.credits import CREDITS, CREDIT_AVATARS, CREDIT_AVATAR_SOURCES
 from src.gui.ios.contributor_media import ContributorMedia, TRANSLATIONS_REPOSITORY
 from src.gui.widgets import (
-    IOSCard, IOSCollapsibleSection,
+    IOSCard,
 )
 from src.gui.theme import ColorThemeManager, theme_pixmap, t
 
@@ -40,7 +40,7 @@ class SupportPanel(IOSCard):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(18)
-        self.title = QLabel(_tr('Developers / Contributors'))
+        self.title = QLabel(_tr('Developers'))
         self.title.setObjectName('supportTitle')
         layout.addWidget(self.title)
         if links is None:
@@ -59,7 +59,13 @@ class SupportPanel(IOSCard):
         for (role, name, url), portrait in zip(CREDITS[:len(portraits)], portraits):
             team.addWidget(self._profile(role, name, url, portrait), 1)
         layout.addLayout(team)
-        credits = IOSCollapsibleSection(_tr('Contributors && acknowledgements'), expanded=False)
+        credits = IOSCard(self)
+        credits_layout = QVBoxLayout(credits)
+        credits_layout.setContentsMargins(20, 18, 20, 18)
+        credits_layout.setSpacing(16)
+        heading = QLabel(_tr('Contributors & Acknowledgments'), credits)
+        heading.setStyleSheet(t('home_tile_title'))
+        credits_layout.addWidget(heading)
         grid = QGridLayout()
         grid.setHorizontalSpacing(24)
         grid.setVerticalSpacing(16)
@@ -69,7 +75,7 @@ class SupportPanel(IOSCard):
             grid.addWidget(self._credit(role, name, url), index // 2, index % 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-        credits.body_layout.addLayout(grid)
+        credits_layout.addLayout(grid)
         self._translation_group = ContributorCredit()
         translation_layout = QVBoxLayout(self._translation_group)
         translation_layout.setContentsMargins(0, 10, 0, 0)
@@ -80,7 +86,7 @@ class SupportPanel(IOSCard):
         heading.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
             f'https://github.com/{TRANSLATIONS_REPOSITORY}/graphs/contributors')))
         translation_layout.addWidget(heading, 0, Qt.AlignLeft)
-        self._translation_status = QLabel(_tr('Open this section to load contributors.'))
+        self._translation_status = QLabel(_tr('Loading translation contributors…'))
         self._translation_status.setObjectName('supportMuted')
         self._translation_status.setWordWrap(True)
         translation_layout.addWidget(self._translation_status)
@@ -88,11 +94,11 @@ class SupportPanel(IOSCard):
         self._translation_grid.setSpacing(8)
         self._translation_grid.setAlignment(Qt.AlignLeft)
         translation_layout.addLayout(self._translation_grid)
-        credits.body_layout.addWidget(self._translation_group)
+        credits_layout.addWidget(self._translation_group)
         self._translations_started = False
-        credits.toggled.connect(self._load_translation_contributors)
         layout.addWidget(credits)
         self._retheme()
+        self._load_translation_contributors(True)
 
     def _profile(self, role, name, url, portrait):
         tile = QWidget()
