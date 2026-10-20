@@ -179,6 +179,7 @@ async def _wait_for_device(udid: str, progress_callback,
         DeviceNotFoundError, PasswordRequiredError, NotPairedError,
         ConnectionFailedError, ConnectionTerminatedError, LockdownError,
         MissingValueError, PairingError, FatalPairingError,
+        MuxException,
     )
     while True:
         start = time.monotonic()
@@ -231,18 +232,25 @@ async def _wait_for_device(udid: str, progress_callback,
                             "re-pair completed but lockdownd still reports "
                             "the host as unpaired")
                     except (MissingValueError, LockdownError,
-                            PairingError, FatalPairingError) as e2:
+                            PairingError, FatalPairingError,
+                            DeviceNotFoundError, ConnectionFailedError,
+                            ConnectionTerminatedError, MuxException,
+                            ConnectionError, OSError, asyncio.TimeoutError) as e2:
                         # PairingError covers the pending/denied trust dialog;
                         # FatalPairingError a rejected re-pair. None of these
                         # should kill the wait — the device may still be
-                        # finishing recovery, so keep polling.
+                        # finishing recovery, so keep polling. USB transport
+                        # drops during re-pairing need the same retry too.
                         last_error = e2
             except (DeviceNotFoundError, PasswordRequiredError,
                     ConnectionFailedError, ConnectionTerminatedError,
+                    MuxException,
                     ConnectionError, OSError, asyncio.TimeoutError,
                     LockdownError) as e:
                 # LockdownError covers MissingValueError and every other
-                # lockdown-level complaint the recovering device may emit
+                # lockdown-level complaint the recovering device may emit.
+                # MuxException is separate from ConnectionError/OSError and
+                # covers usbmux sockets torn down during a reboot.
                 last_error = e
                 if isinstance(e, PasswordRequiredError):
                     saw_password_required = True

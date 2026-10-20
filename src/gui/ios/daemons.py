@@ -269,7 +269,6 @@ class IOSDaemonsContent(QWidget):
             (QCoreApplication.translate("Nugget", "Disable Video Subscriptions"), Daemon.VideoSubscriptions),
             (QCoreApplication.translate("Nugget", "Disable Web Bookmarks"), Daemon.WebBookmarks),
             (QCoreApplication.translate("Nugget", "Disable Apple Watch (Nano) Services"), Daemon.AppleWatchNano),
-            (QCoreApplication.translate("Nugget", "Disable Siri Backend Services"), Daemon.SiriServices),
             (QCoreApplication.translate("Nugget", "Disable Wi-Fi Logging"), Daemon.WifiLogging),
             (QCoreApplication.translate("Nugget", "Disable Maps (Geod)"), Daemon.Maps),
             (QCoreApplication.translate("Nugget", "Disable Safari Suggestions (Parse)"), Daemon.SafariSuggestions),
