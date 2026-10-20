@@ -1,6 +1,5 @@
 """Shared feature artwork for home cards and page headers."""
 
-# Full-colour artwork: theme_pixmap draws raster files as they are, untinted.
 FEATURE_ICONS = {
     "Tweaks": ":/icon/features/tweaks.png",
     "PosterBoard": ":/icon/features/posterboard.png",

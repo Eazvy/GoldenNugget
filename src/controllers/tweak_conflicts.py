@@ -61,6 +61,13 @@ def find_conflicts(selections):
     if all(tweak is not None and tweak.enabled and tweak.value for tweak in (rtl, ltr)):
         conflicts.append(TweakConflict(TweakID.RTL, TweakID.LTR, QT_TRANSLATE_NOOP(
             "TweakConflicts", "Both layout directions are forced at the same time. Select only one.")))
+    for spec in SPECS_BY_ID.values():
+        if spec.exclusive_with is None or spec.id.value >= spec.exclusive_with.value:
+            continue
+        pair = (selections.get(spec.id), selections.get(spec.exclusive_with))
+        if all(tweak is not None and tweak.enabled for tweak in pair):
+            conflicts.append(TweakConflict(spec.id, spec.exclusive_with, QT_TRANSLATE_NOOP(
+                "TweakConflicts", "Select only one Dynamic Island GPU fill experiment.")))
     return conflicts
 
 

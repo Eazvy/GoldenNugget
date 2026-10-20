@@ -14,8 +14,10 @@ class TweakFavorites(QObject):
         return cls._instance
 
     def names(self):
-        raw = Settings().value('favorite_tweaks', '', type=str) or ''
-        return set(filter(None, raw.split(',')))
+        if not hasattr(self, "_names"):
+            raw = Settings().value('favorite_tweaks', '', type=str) or ''
+            self._names = set(filter(None, raw.split(',')))
+        return self._names.copy()
 
     def set_favorite(self, name, selected):
         names = self.names()
@@ -23,6 +25,9 @@ class TweakFavorites(QObject):
             names.add(name)
         else:
             names.discard(name)
+        if names == self.names():
+            return
+        self._names = names
         store = Settings()
         store.setValue('favorite_tweaks', ','.join(sorted(names)))
         store.sync()

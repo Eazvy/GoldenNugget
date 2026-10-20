@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, QSize, QUrl, QRectF, QCoreApplication
-from PySide6.QtGui import QDesktopServices, QPixmap, QPainter, QPainterPath, QIcon
+from PySide6.QtGui import QDesktopServices, QPixmap, QPainter, QPainterPath, QIcon, QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QPushButton, QToolButton, QSizePolicy,
@@ -17,32 +17,20 @@ def _tr(text):
 
 
 class SupportPanel(IOSCard):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, links=None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(18)
-        header = QVBoxLayout()
-        header.setSpacing(12)
-        heading = QVBoxLayout()
-        heading.setSpacing(4)
-        self.title = QLabel(_tr('Join for Support!'))
+        self.title = QLabel(_tr('Developers / Contributors'))
         self.title.setObjectName('supportTitle')
-        heading.addWidget(self.title)
-        self.subtitle = QLabel(_tr('GoldenNugget community & project'))
-        self.subtitle.setObjectName('supportMuted')
-        heading.addWidget(self.subtitle)
-        header.addLayout(heading)
-        self.discord = self._link_icon('Join the GoldenNugget Discord server', 'https://discord.gg/F7ssrHjdgK')
-        self.github = self._link_icon('GoldenNugget on GitHub', 'https://github.com/GoldenNugget-Team/GoldenNugget')
-        links = QHBoxLayout()
-        links.setSpacing(8)
-        links.addWidget(self.discord)
-        links.addWidget(self.github)
-        links.addStretch(1)
-        header.addLayout(links)
-        layout.addLayout(header)
+        layout.addWidget(self.title)
+        if links is None:
+            links = CommunityLinks(self)
+            layout.addWidget(links)
+        self.discord = links.discord
+        self.github = links.github
         team = QHBoxLayout()
         team.setSpacing(12)
         portraits = (
@@ -68,12 +56,14 @@ class SupportPanel(IOSCard):
 
     def _profile(self, role, name, url, portrait):
         tile = QWidget()
+        tile.setObjectName('supportProfile')
+        tile.setMinimumHeight(188)
         column = QVBoxLayout(tile)
-        column.setContentsMargins(8, 8, 8, 8)
-        column.setSpacing(5)
+        column.setContentsMargins(16, 18, 16, 16)
+        column.setSpacing(9)
         avatar = QToolButton()
-        avatar.setFixedSize(60, 60)
-        avatar.setIconSize(QSize(56, 56))
+        avatar.setFixedSize(92, 92)
+        avatar.setIconSize(QSize(88, 88))
         avatar.setIcon(QIcon(self._portrait(portrait)))
         avatar.setObjectName('supportAvatar')
         avatar.setToolTip(f'{name} · {role}')
@@ -111,38 +101,115 @@ class SupportPanel(IOSCard):
         return entry
 
 
-    def _link_icon(self, label, url):
-        button = QToolButton()
-        button.setObjectName('supportLink')
-        button.setFixedSize(48, 48)
-        button.setIconSize(QSize(26, 26))
-        button.setToolTip(_tr(label))
-        button.setAccessibleName(_tr(label))
-        button.setCursor(Qt.PointingHandCursor)
-        button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-        return button
-
     @staticmethod
     def _portrait(resource):
         source = QPixmap(resource).scaled(
-            112, 112, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-        image = QPixmap(112, 112)
+            176, 176, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        image = QPixmap(176, 176)
         image.fill(Qt.transparent)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.Antialiasing)
         mask = QPainterPath()
-        mask.addEllipse(QRectF(0, 0, 112, 112))
+        mask.addEllipse(QRectF(0, 0, 176, 176))
         painter.setClipPath(mask)
-        painter.drawPixmap((112 - source.width()) // 2, (112 - source.height()) // 2, source)
+        painter.drawPixmap((176 - source.width()) // 2, (176 - source.height()) // 2, source)
         painter.end()
         image.setDevicePixelRatio(2)
         return image
 
     def _retheme(self):
         super()._retheme()
-        if not hasattr(self, 'discord'):
-            return
-        c = ColorThemeManager.instance().colors
         self.setStyleSheet(self.styleSheet() + t("support_panel"))
-        self.discord.setIcon(QIcon(theme_pixmap(':/icon/discord.svg', '#5865F2', 26, self.devicePixelRatioF())))
-        self.github.setIcon(QIcon(theme_pixmap(':/icon/github.svg', c.text_primary, 26, self.devicePixelRatioF())))
+
+
+class CommunityLinks(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(340)
+        layout = QGridLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+        self._counts = []
+        for title in ('Tweaks', 'Daemons'):
+            card = QWidget(self)
+            card.setObjectName('selectionCount')
+            card.setFixedHeight(80)
+            column = QVBoxLayout(card)
+            column.setContentsMargins(12, 10, 12, 10)
+            column.setSpacing(4)
+            value = QLabel('0', card)
+            value.setAlignment(Qt.AlignCenter)
+            caption = QLabel(_tr(title + ' enabled'), card)
+            caption.setAlignment(Qt.AlignCenter)
+            column.addWidget(value)
+            column.addWidget(caption)
+            layout.addWidget(card, 0, len(self._counts))
+            self._counts.append((title.lower(), card, value, caption))
+        self._links = []
+        for title, icon, url in (
+            ('Golden Nugget Support', ':/icon/discord.svg', 'https://discord.gg/F7ssrHjdgK'),
+            ('Source Code', ':/icon/github.svg', 'https://github.com/GoldenNugget-Team/GoldenNugget'),
+        ):
+            button = QPushButton(self)
+            button.setObjectName('communityLink')
+            button.setFixedHeight(80)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setAccessibleName(_tr(title))
+            button.clicked.connect(lambda checked=False, link=url: QDesktopServices.openUrl(QUrl(link)))
+            column = QVBoxLayout(button)
+            column.setContentsMargins(10, 9, 10, 9)
+            column.setSpacing(3)
+            badge = QLabel(button)
+            badge.setFixedSize(26, 26)
+            badge.setAlignment(Qt.AlignCenter)
+            top = QGridLayout()
+            top.setContentsMargins(0, 0, 0, 0)
+            top.setColumnMinimumWidth(0, 16)
+            top.setColumnMinimumWidth(2, 16)
+            top.setColumnStretch(1, 1)
+            top.addWidget(badge, 0, 1, Qt.AlignCenter)
+            arrow = QLabel('↗', button)
+            arrow.setFixedSize(16, 20)
+            arrow.setAlignment(Qt.AlignCenter)
+            top.addWidget(arrow, 0, 2, Qt.AlignTop | Qt.AlignRight)
+            column.addLayout(top)
+            heading = QLabel(_tr(title), button)
+            heading.setAlignment(Qt.AlignCenter)
+            heading.setWordWrap(True)
+            heading.setFixedHeight(30)
+            column.addWidget(heading)
+            for label in (badge, heading, arrow):
+                label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            layout.addWidget(button, 1, len(self._links))
+            self._links.append((button, icon, badge, heading, arrow))
+        self.discord = self._links[0][0]
+        self.github = self._links[1][0]
+        self._retheme()
+
+    def set_counts(self, counts, totals):
+        for key, card, value, caption in self._counts:
+            value.setText(str(counts.get(key, 0)))
+            card.setToolTip(_tr('{0} available').format(totals.get(key, 0)))
+
+    def _retheme(self):
+        c = ColorThemeManager.instance().colors
+        for key, card, value, caption in self._counts:
+            card.setStyleSheet(f'QWidget#selectionCount {{ background:{c.bg_secondary}; border:1px solid {c.border}; border-radius:16px; }}')
+            value.setStyleSheet(f'color:{c.accent}; background:transparent; font-size:26px; font-weight:700;')
+            caption.setStyleSheet(f'color:{c.text_secondary}; background:transparent; font-size:12px;')
+        dark = QColor(c.bg_secondary).lightnessF() < 0.5
+        for button, icon, badge, heading, arrow in self._links:
+            color = '#5865F2' if 'discord' in icon else '#FFFFFF' if dark else '#24292F'
+            badge.setPixmap(theme_pixmap(icon, color, 24, self.devicePixelRatioF()))
+            badge.setStyleSheet('background:transparent;')
+            arrow.setStyleSheet(f'background:transparent; color:{c.text_secondary}; font-size:15px;')
+            heading.setStyleSheet(f'background:transparent; color:{c.text_primary}; font-size:12px; font-weight:500;')
+            button.setStyleSheet(f"""
+                QPushButton#communityLink {{ background:{c.bg_secondary};
+                    border:1px solid {c.border}; border-radius:16px; padding:0; }}
+                QPushButton#communityLink:hover {{ background:{c.surface_hover}; }}
+                QPushButton#communityLink:pressed {{ border-color:{c.text_secondary}; }}
+            """)

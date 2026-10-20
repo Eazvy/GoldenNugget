@@ -52,15 +52,29 @@ STYLES = {
     "number_input_dialog": """
         QDialog {{ background-color: {bg_elevated}; }}
         QLabel {{ color: {text_primary}; font-size: 15px; }}
-        QSpinBox {{
+        QSpinBox, QDoubleSpinBox {{
             background-color: {bg_input};
-            border: none;
+            border: 1px solid {border};
             border-radius: 10px;
             color: {text_primary};
             font-size: 15px;
-            padding: 12px 16px;
+            padding: 10px 14px;
         }}
-        QSpinBox::up-button, QSpinBox::down-button {{ width: 0; }}
+        QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {accent}; }}
+        QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            color: {text_primary};
+            font-size: 15px;
+            padding: 0;
+            margin: 0;
+            min-height: 0;
+            selection-background-color: {accent};
+            selection-color: {text_inverse};
+        }}
+        QSpinBox::up-button, QSpinBox::down-button,
+        QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{ width: 0; }}
         QPushButton {{
             background-color: {accent};
             border-radius: 10px;
@@ -273,8 +287,9 @@ STYLES = {
             QLabel#supportCredit {{ color: {text_primary}; font-size: 13px; }}
             QToolButton#supportLink {{ background: {bg_tertiary}; border: 1px solid {border}; border-radius: 14px; }}
             QToolButton#supportLink:hover {{ border-color: {accent}; background: {surface_hover}; }}
+            QWidget#supportProfile {{ background: {bg_secondary}; border: 1px solid {border}; border-radius: 18px; }}
             QToolButton#supportAvatar {{ background: transparent; border: none; padding: 2px; }}
-            QPushButton#supportName {{ background: transparent; color: {text_primary}; font-size: 15px; font-weight: 600; border: none; padding: 5px; }}
+            QPushButton#supportName {{ background: transparent; color: {text_primary}; font-size: 17px; font-weight: 600; border: none; padding: 5px; }}
             QPushButton#supportName:hover {{ color: {accent}; }}
             """,
 

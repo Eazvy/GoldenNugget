@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.gui.dialogs.device_support import support_lines
 from src.controllers.hotload import HotLoad
 from src.tweaks.tweak_names import TweakID
+from src.tweaks.registry import SPECS_BY_ID
 
 
 class DeviceSupportTests(unittest.TestCase):
@@ -36,17 +37,17 @@ class DeviceSupportTests(unittest.TestCase):
 
     def test_version_limits_and_experimental_status(self):
         self.assertIn('experimental', self.text())
-        self.assertIn('Force Solarium Fallback: supports iOS 26.99 or older', self.text())
+        self.assertIn(SPECS_BY_ID[TweakID.ForceSolariumFallback].title + ': supports iOS 26.99 or older', self.text())
         self.manager.get_current_device_version = lambda: '26.2'
         self.manager.get_current_device_partially_supported = lambda: False
-        self.assertIn('Disallow Glass Buttons: requires iOS 27.0 or newer', self.text())
+        self.assertIn(SPECS_BY_ID[TweakID.DisallowGlassButtons].title + ': requires iOS 27.0 or newer', self.text())
         self.manager.get_current_device_is_supported_by_fork = lambda: False
         self.assertIn('Available registry tweaks (0)', self.text())
 
     def test_safety_reason_and_disabled_rules(self):
         self.safety.rule_for.side_effect = lambda tid, **kw: (
             {'reason': 'Blocked for test'} if tid == TweakID.NoLiquidDock else None)
-        self.assertIn('Disable Liquid Glass on Dock: Blocked for test', self.text())
+        self.assertIn(SPECS_BY_ID[TweakID.NoLiquidDock].title + ': Blocked for test', self.text())
         self.safety.rule_for.side_effect = None
         self.safety.is_enabled.return_value = False
         self.assertIn('HotLoad safety rules are turned off', self.text())

@@ -2,6 +2,7 @@
 
 Keep application settings and theme ownership here; implementations live in awesomeui.
 """
+from PySide6.QtCore import QTimer
 from awesomeui import configure_theme, Sidebar, SidebarTheme
 from src.gui.theme import ColorThemeManager, t, theme_pixmap
 from src.gui.theme.theme_manager import connect_visible_theme
@@ -10,12 +11,12 @@ configure_theme(manager=ColorThemeManager.instance, stylesheet=t,
                 pixmap=theme_pixmap, connect=connect_visible_theme)
 
 from awesomeui.controls import (
-    IOSSearchField,
+    IOSSearchField as _SearchField,
     IOSSegmentedFilter,
     IOSSearchEmpty,
     IOSSectionHeader,
     IOSCard,
-    IOSCollapsibleSection,
+    IOSCollapsibleSection as _CollapsibleSection,
     IOSNavBar,
     IOSValueRow,
     IOSSettingsRow,
@@ -25,6 +26,34 @@ from awesomeui.controls import (
     IOSSwitch,
     _auto_retheme,
 )
+
+
+class IOSSearchField(_SearchField):
+    def connect_filter(self, callback):
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(100)
+        timer.timeout.connect(callback)
+        self.textChanged.connect(lambda: timer.start())
+        self._filter_timer = timer
+
+    def matches(self, *texts):
+        if not hasattr(self, "_search_index"):
+            self._search_index = {}
+        key = tuple(text or "" for text in texts)
+        if key not in self._search_index:
+            self._search_index[key] = " ".join(key).casefold()
+        query = self.text()
+        if query != getattr(self, "_last_query", None):
+            self._last_query = query
+            self._search_words = query.casefold().split()
+        return all(word in self._search_index[key] for word in self._search_words)
+
+
+class IOSCollapsibleSection(_CollapsibleSection):
+    def _update_header_text(self):
+        chevron = self.EXPANDED_CHEVRON if self._expanded else self.COLLAPSED_CHEVRON
+        self.header.setText(f"{chevron}  {self._title.replace('&', '&&')}{self._title_suffix}")
 
 
 class NavigationSidebar(Sidebar):

@@ -183,7 +183,7 @@ class Themes(unittest.TestCase):
             APP.processEvents()
             self.assertTrue(picker._buttons['green'].isChecked())
             self.assertIn(self.manager.colors.text_primary, picker._buttons['green'].styleSheet())
-            self.assertIn(self.manager.colors.text_primary, numeric.spin.styleSheet())
+            self.assertIn(self.manager.colors.text_primary, numeric.styleSheet())
             self.assertIn(self.manager.colors.text_inverse, about.styleSheet())
             self.assertNotIn(DARK.text_secondary, ''.join(label.styleSheet() for label in about.findChildren(QLabel)))
         finally:

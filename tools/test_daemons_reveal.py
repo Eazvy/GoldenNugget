@@ -14,7 +14,7 @@ import sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QTimer, QElapsedTimer
 from PySide6.QtWidgets import QApplication
 
 from src.gui.ios.daemons import IOSDaemonsContent, _NO_MAX_HEIGHT
@@ -68,22 +68,23 @@ def main():
     content = IOSDaemonsContent(FakeWindow())
     content.resize(640, 900)
     content.show()
-    pump(50)
+    deadline = QElapsedTimer()
+    deadline.start()
+    while content._building and deadline.elapsed() < 10000:
+        pump(10)
+    check("incremental row construction completes", not content._building)
     rows = content._rows
 
-    check("rows were collected into the animated block",
-          len(rows._rows) == len(content.daemon_cards) + 3
-          + (1 if content._screen_time_card is not None else 0),
-          f"{len(rows._rows)} widgets, {len(content.daemon_cards)} cards")
-    check("the Recommended shortcut unrolls with the list, not before it",
-          rows._rows[0] is content.recommended_card
-          and content._screen_time_group in rows._rows)
+    check("categorized daemon cards belong to the row block",
+          bool(content.daemon_cards) and all(rows.isAncestorOf(card) for card in content.daemon_cards))
+    check("the analytics shortcut is inside the row block",
+          rows.isAncestorOf(content.analytics_switch))
     check("block is folded away while modifications are off",
           not rows.isVisible() and rows.maximumHeight() == 0)
-    check("Recommended is folded away with the list",
-          not content.recommended_card.isVisibleTo(content))
+    check("analytics is folded away with the list",
+          not content.analytics_switch.isVisibleTo(content))
     check("all dependent switches are disabled with the master",
-          not rows.isEnabled() and not content.recommended_switch.isEnabled()
+          not rows.isEnabled() and not content.analytics_switch.isEnabled()
           and all(not switch.isEnabled() for _, switch in content.daemon_switches))
     before = dict(daemons_tweak.value)
     content._on_daemon_toggled(content.daemon_switches[0][0], True)
