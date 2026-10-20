@@ -1,4 +1,5 @@
 """Shared project credits for the About dialog and idle support panel."""
+from pathlib import Path
 from PySide6.QtCore import QT_TRANSLATE_NOOP
 
 CREDITS = [
@@ -6,6 +7,7 @@ CREDITS = [
     (QT_TRANSLATE_NOOP("SupportPanel", "Co-Developer"), "Windows11Aero", "https://github.com/Wind0ws11Aero"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Co-Developer"), "kik4311", "https://github.com/kik4311"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Nugget Creator"), "leminlimez", "https://github.com/leminlimez"),
+    (QT_TRANSLATE_NOOP("SupportPanel", "Icon Artwork"), "mekabrine", "https://discord.com/users/1196529222617923660"),
     (QT_TRANSLATE_NOOP("SupportPanel", "PosterRestore Team"), "PosterRestore Discord", "https://discord.gg/gWtzTVhMvh"),
     (QT_TRANSLATE_NOOP("SupportPanel", "PosterBoard Help"), "dootskyre, Middo, dulark, forcequitOS, pingubow", "https://twitter.com/dootskyre"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Wallpaper Website"), "SerStars", "https://cowabun.ga/wallpapers"),
@@ -21,3 +23,8 @@ CREDITS = [
     (QT_TRANSLATE_NOOP("SupportPanel", "Translations"), QT_TRANSLATE_NOOP("SupportPanel", "GoldenNugget translation contributors"), "https://github.com/awesomenull-dev/gNugget-i18n"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Legacy Translations"), QT_TRANSLATE_NOOP("SupportPanel", "Nugget translation contributors"), "https://poeditor.com/join/project/UTqpVSE2UD"),
 ]
+
+CREDIT_AVATARS = {
+    "https://discord.com/users/1196529222617923660":
+        str(Path(__file__).resolve().parents[1] / "qt" / "credits" / "mekabrine.webp"),
+}

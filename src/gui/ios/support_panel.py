@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QPushButton, QToolButton, QSizePolicy,
 )
 
-from src.gui.credits import CREDITS
+from src.gui.credits import CREDITS, CREDIT_AVATARS
 from src.gui.widgets import (
     IOSCard, IOSCollapsibleSection,
 )
@@ -87,9 +87,25 @@ class SupportPanel(IOSCard):
     @staticmethod
     def _credit(role, name, url):
         entry = QWidget()
-        column = QVBoxLayout(entry)
+        row = QHBoxLayout(entry)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        portrait = CREDIT_AVATARS.get(url)
+        if portrait:
+            avatar = QToolButton(entry)
+            avatar.setObjectName('supportAvatar')
+            avatar.setFixedSize(52, 52)
+            avatar.setIconSize(QSize(48, 48))
+            avatar.setIcon(QIcon(SupportPanel._portrait(portrait)))
+            avatar.setAccessibleName(f'{name} · {role}')
+            avatar.setToolTip(f'{name} · {role}')
+            avatar.setCursor(Qt.PointingHandCursor)
+            avatar.clicked.connect(lambda _, link=url: QDesktopServices.openUrl(QUrl(link)))
+            row.addWidget(avatar)
+        column = QVBoxLayout()
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(4)
+        row.addLayout(column, 1)
         label = QLabel(_tr(role))
         label.setObjectName('supportMuted')
         column.addWidget(label)

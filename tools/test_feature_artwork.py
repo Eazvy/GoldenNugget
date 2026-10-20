@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from PySide6.QtGui import QBitmap, QRegion
-from PySide6.QtWidgets import QApplication, QLabel, QFrame
+from PySide6.QtWidgets import QApplication, QLabel, QFrame, QToolButton
 from src.qt import resources_rc
 from src.gui.ios.feature_icons import FEATURE_ICONS
 from src.gui.ios.home import IOSHomePage
@@ -18,6 +18,19 @@ APP = QApplication.instance() or QApplication([])
 
 
 class FeatureArtwork(unittest.TestCase):
+    def test_icon_artist_credit_avatar_and_link(self):
+        from src.gui.credits import CREDITS
+        from src.gui.ios.support_panel import SupportPanel
+        credit = next(entry for entry in CREDITS if entry[1] == 'mekabrine')
+        entry = SupportPanel._credit(*credit)
+        avatar = entry.findChild(QToolButton)
+        self.assertIsNotNone(avatar)
+        self.assertFalse(avatar.icon().isNull())
+        with patch('src.gui.ios.support_panel.QDesktopServices.openUrl') as open_url:
+            avatar.click()
+        self.assertEqual(open_url.call_args.args[0].toString(),
+                         'https://discord.com/users/1196529222617923660')
+
     def test_passcode_artwork_uses_requested_size(self):
         home = SimpleNamespace(_c=SimpleNamespace(text_primary='#ffffff'),
                                devicePixelRatioF=lambda: 1)
