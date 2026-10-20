@@ -287,6 +287,8 @@ def main() -> int:
     widget.resize(max(1000, min(1100, avail.width() - 80)),
                   max(600, min(760, avail.height() - 80)))
     widget.show()
+    from src.gui.window_activation import WindowActivationController
+    widget._activation_controller = WindowActivationController(app, widget)
 
     # First-launch dialogs (interface picker + backup reminder) are deferred
     # to the first event-loop iteration so the window is fully mapped and
@@ -296,6 +298,13 @@ def main() -> int:
     from PySide6.QtCore import QTimer
     QTimer.singleShot(0, widget.run_first_launch_prompts)
 
+    def prepare_control_pages():
+        if widget.ios_tweaks.content._inner is None and not getattr(widget.ios_tweaks.content, "_building", False):
+            widget.ios_tweaks.content.rebuild()
+        widget.ios_daemons.prepare_content()
+
+    QTimer.singleShot(0, prepare_control_pages)
+
     # Check for updates in the background so startup never blocks on the
     # network (GitHub API latency / offline timeouts). The modal dialog is
     # exec'd on the main thread via a queued signal once the answer is known.
@@ -304,25 +313,25 @@ def main() -> int:
         from PySide6.QtCore import QObject, Signal
 
         class _UpdateSignal(QObject):
-            available = Signal(bool)
+            available = Signal(object)
 
         _update_signal = _UpdateSignal()
 
-        def _show_update_dialog():
-            from src.gui.dialogs import UpdateAppDialog
-            UpdateAppDialog().exec()
-
         def _check_update():
             try:
-                from src.controllers.web_request_handler import is_update_available
+                from src.controllers import web_request_handler
                 from src.gui.version import App_Version, App_Build
-                ok = bool(is_update_available(App_Version, App_Build))
+                result = web_request_handler.is_update_available(App_Version, App_Build)
+                ok = bool(result) if web_request_handler.last_fetched_version is not None else None
             except Exception as e:
                 logger.debug("Update check failed: %s", e)
-                ok = False
+                ok = None
             _update_signal.available.emit(ok)
 
-        _update_signal.available.connect(lambda ok: _show_update_dialog() if ok else None)
+        def _update_checked(available):
+            widget.ios_home.set_update_available(available)
+
+        _update_signal.available.connect(_update_checked)
         threading.Thread(target=_check_update, daemon=True).start()
         app._update_signal = _update_signal  # keep a strong reference
     except Exception as e:

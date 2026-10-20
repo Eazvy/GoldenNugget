@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QStandardPaths, QCoreApplication
 
 MAX_ENTRIES = 30
 
@@ -24,7 +24,7 @@ def load_history():
         return []
 
 
-def record_operation(manager, mode, success, error=""):
+def record_operation(manager, mode, success, error="", reset_pages=None):
     """Append one bounded record atomically; never affects the operation result."""
     try:
         item = {
@@ -34,6 +34,21 @@ def record_operation(manager, mode, success, error=""):
             "model": manager.get_current_device_model() or "", "ios": manager.get_current_device_version() or "",
             "udid": manager.get_current_device_udid() or "",
         }
+        applied = dict(tweaks=None, daemons=None, wallpaper=None)
+        if success and mode == "apply":
+            preview = getattr(manager, '_last_operation_preview', None)
+            if isinstance(preview, dict):
+                entries = preview.get('entries', {})
+                applied['tweaks'] = any(not key.startswith('Daemons/') for key in entries)
+                applied['daemons'] = any(key.startswith('Daemons/') and entry.get('value') is True for key, entry in entries.items())
+                applied['wallpaper'] = any(section in ('PosterBoard', QCoreApplication.translate('ApplyPreview', 'Video wallpaper')) for section, _ in preview.get('queued', []))
+        elif success and mode == "reset":
+            names = {getattr(page, 'name', str(page)) for page in (reset_pages or [])}
+            if 'Daemons' in names:
+                applied['daemons'] = False
+            if 'Posterboard' in names:
+                applied['wallpaper'] = False
+        item['applied'] = applied
         records = (load_history() + [item])[-MAX_ENTRIES:]
         path = _path()
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=os.path.dirname(path), delete=False) as stream:

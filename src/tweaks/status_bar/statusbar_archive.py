@@ -33,8 +33,7 @@ at the archiver's zero value. That is why an unset network type or bar count
 is written as 0 ("none") instead of a plausible-looking constant: a
 carrier-name-only override must not fabricate a "5G" label or a permanently
 full signal. Live signal strength cannot be expressed in this format at all;
-the upstream project's answer is a CommCenter-level PLMN mapping, which is
-research-stage and deliberately not implemented here.
+this archive cannot preserve live cellular indicators.
 
 There is deliberately **no** support for the classic time/date/battery/wifi
 overrides or for the 46 per-item show/hide toggles: no counterpart for them

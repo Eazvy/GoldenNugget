@@ -1,5 +1,7 @@
+from functools import lru_cache
+from pathlib import Path
 from PySide6.QtCore import Qt, QSize, QRect, QRectF
-from PySide6.QtGui import QBitmap, QColor, QIcon, QImage, QPainter, QPixmap, QRegion
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap, QBitmap, QRegion
 
 from src.gui.theme.theme_manager import ColorThemeManager
 from src.gui.theme.colors import DARK, LIGHT, ACCENT_PRESETS, LIGHT_ACCENT_PRESETS
@@ -23,10 +25,12 @@ def themed_stylesheet(style_key: str, **extra) -> str:
     return STYLES[style_key].format_map(payload)
 
 
+@lru_cache(maxsize=256)
 def theme_icon(resource_path: str, color_hex: str) -> QIcon:
-    """Recolor a monochrome (white) SVG icon to *color_hex* using its alpha.
-    Raster artwork is returned as it is."""
-    if not resource_path.lower().endswith(".svg"):
+    """Tint monochrome SVGs while preserving supplied raster artwork."""
+    if resource_path.startswith(':/icon/features/') and resource_path.lower().endswith('.png'):
+        return QIcon(theme_pixmap(resource_path, color_hex, 64))
+    if not resource_path.lower().endswith('.svg'):
         return QIcon(resource_path)
     img = QImage(resource_path)
     img = img.convertToFormat(QImage.Format.Format_ARGB32)
@@ -38,18 +42,10 @@ def theme_icon(resource_path: str, color_hex: str) -> QIcon:
     return QIcon(QPixmap.fromImage(img))
 
 
-def _crop_to_content(image: QImage) -> QImage:
-    """*image* without its fully transparent border."""
-    bounds = QRegion(QBitmap.fromImage(image.createAlphaMask())).boundingRect()
-    return image.copy(bounds) if not bounds.isEmpty() else image
-
-
+@lru_cache(maxsize=128)
 def theme_pixmap(resource_path: str, color_hex: str, size: int,
                  dpr: float = 1.0) -> QPixmap:
-    """Rasterize a monochrome SVG at *size* logical pixels, tinted to a color.
-
-    Raster artwork (the feature PNGs) is not tinted: it is cropped to its
-    visible pixels and fitted into the square, keeping its aspect ratio.
+    """Fit artwork to *size* logical pixels, tinting only monochrome SVGs.
 
     Unlike ``theme_icon`` the icon is scaled by the SVG engine *before* the
     tint is applied, so icons with a small viewBox (11x11, 16x16) stay crisp
@@ -63,13 +59,21 @@ def theme_pixmap(resource_path: str, color_hex: str, size: int,
     pm.setDevicePixelRatio(scale)
     pm.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pm)
-    if not resource_path.lower().endswith(".svg"):
-        image = QImage(resource_path)
+    if not resource_path.lower().endswith('.svg'):
+        source = resource_path
+        if resource_path.startswith(':/icon/features/'):
+            artwork = Path(__file__).resolve().parents[2] / 'qt' / resource_path[2:]
+            if artwork.is_file():
+                source = str(artwork)
+        image = QImage(source)
         if not image.isNull():
-            image = _crop_to_content(image)
+            if resource_path.startswith(':/icon/features/'):
+                bounds = QRegion(QBitmap.fromImage(image.createAlphaMask())).boundingRect()
+                if not bounds.isEmpty():
+                    image = image.copy(bounds.adjusted(-2, -2, 2, 2).intersected(image.rect()))
             factor = logical / max(image.width(), image.height())
             width, height = image.width() * factor, image.height() * factor
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.setRenderHint(QPainter.SmoothPixmapTransform)
             painter.drawImage(QRectF((logical - width) / 2, (logical - height) / 2, width, height), image)
         painter.end()
         return pm
@@ -83,6 +87,6 @@ def theme_pixmap(resource_path: str, color_hex: str, size: int,
 
 
 __all__ = [
-    "ColorThemeManager", "DARK", "LIGHT", "ACCENT_PRESETS", "LIGHT_ACCENT_PRESETS", "STYLES", "FONT_FAMILY",
+    "ColorThemeManager", "DARK", "ACCENT_PRESETS", "STYLES", "FONT_FAMILY",
     "AccentPicker", "t", "themed_stylesheet", "theme_icon", "theme_pixmap",
 ]

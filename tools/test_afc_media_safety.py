@@ -27,6 +27,8 @@ import shutil
 import sys
 import time
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -93,6 +95,9 @@ class FakeAfc:
         if path in self.files:
             return {"st_size": len(self.files[path]), "st_ifmt": "S_IFREG"}
         return {"st_size": 0, "st_ifmt": "S_IFDIR"}
+
+    async def isdir(self, path):
+        return (await self.stat(path))["st_ifmt"] == "S_IFDIR"
 
     async def exists(self, path):
         return True
@@ -443,6 +448,9 @@ def test_afc_open_retry():
     def always_fails(exc):
         return lambda: FakeAfc(fail_times=1, exc=exc)
 
+    original_connect = afc_media.create_using_usbmux
+    client = SimpleNamespace(identifier="UDID", close=AsyncMock())
+    afc_media.create_using_usbmux = AsyncMock(return_value=client)
     real_sleep, real_monotonic = asyncio.sleep, time.monotonic
 
     async def no_sleep(_):
@@ -464,7 +472,7 @@ def test_afc_open_retry():
 
         async def run():
             async with afc_media.open_afc_for_media(
-                    object(), progress_callback=labels.append) as svc:
+                    client, progress_callback=labels.append) as svc:
                 body.append(svc)
         asyncio.run(run())
 
@@ -481,7 +489,7 @@ def test_afc_open_retry():
         install(fails_once(DROPPED))
 
         async def run_dropped():
-            async with afc_media.open_afc_for_media(object()):
+            async with afc_media.open_afc_for_media(client):
                 return "ok"
         check("a dropped connection is retried, not fatal",
               asyncio.run(run_dropped()) == "ok")
@@ -490,7 +498,7 @@ def test_afc_open_retry():
         install(always_fails(RuntimeError("no such service")))
 
         async def run_bad():
-            async with afc_media.open_afc_for_media(object(), timeout=60):
+            async with afc_media.open_afc_for_media(client, timeout=60):
                 raise AssertionError("body must not run")
         try:
             asyncio.run(run_bad())
@@ -506,7 +514,7 @@ def test_afc_open_retry():
         ran = []
 
         async def run_exhausted():
-            async with afc_media.open_afc_for_media(object(), timeout=0) as svc:
+            async with afc_media.open_afc_for_media(client, timeout=0) as svc:
                 ran.append(svc)
         try:
             asyncio.run(run_exhausted())
@@ -530,7 +538,7 @@ def test_afc_open_retry():
 
         async def run_abort():
             async with afc_media.open_afc_for_media(
-                    object(), prompt_choice=prompt_abort,
+                    client, prompt_choice=prompt_abort,
                     unlock_prompt=("T", "unlock it"), timeout=0):
                 raise AssertionError("body must not run")
         try:
@@ -558,7 +566,7 @@ def test_afc_open_retry():
 
         async def run_resume():
             async with afc_media.open_afc_for_media(
-                    object(), prompt_choice=prompt_resume,
+                    client, prompt_choice=prompt_resume,
                     unlock_prompt=("T", "unlock it"), timeout=0) as svc:
                 return svc
         got = asyncio.run(run_resume())
@@ -566,6 +574,7 @@ def test_afc_open_retry():
               got is not None and got is made[-1])
         check("Resume was asked exactly once", len(seen) == 1, f"{len(seen)} prompts")
     finally:
+        afc_media.create_using_usbmux = original_connect
         afc_media.asyncio.sleep = real_sleep
         afc_media.time.monotonic = real_monotonic
         afc_media.AfcService = _REAL_AFC_SERVICE

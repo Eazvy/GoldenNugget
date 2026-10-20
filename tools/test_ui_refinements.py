@@ -19,7 +19,7 @@ from src.gui.dialogs.reset_dialog import ResetDialog
 from src.gui.ios.components import IOSSearchField, IOSSummaryDialog, IOSSwitch
 from src.gui.ios.settings import IOSSettingsPage
 from src.gui.ios.operation_result import OperationResultCard
-from src.gui.ios.support_panel import SupportPanel
+from src.gui.ios.support_panel import SupportPanel, CommunityLinks
 from src.gui.theme import ColorThemeManager
 from src.restore.protective import ProtectiveBackupService
 from pymobiledevice3.services.mobilebackup2 import (
@@ -146,6 +146,15 @@ class UIRefinementTests(unittest.TestCase):
             self.assertEqual(open_url.call_args.args[0].toString(),
                              "https://github.com/GoldenNugget-Team/GoldenNugget")
         panel.deleteLater()
+
+    def test_home_support_panel_reuses_existing_link_cards(self):
+        links = CommunityLinks()
+        panel = SupportPanel(links=links)
+        self.assertIs(panel.discord, links.discord)
+        self.assertIs(panel.github, links.github)
+        self.assertFalse(panel.isAncestorOf(links))
+        panel.deleteLater()
+        links.deleteLater()
 
     def test_setup_dependencies_keep_saved_choices(self):
         preferences = SimpleNamespace(skip_setup=False, supervised=True)

@@ -30,6 +30,8 @@ import os
 from typing import Callable, Optional
 from urllib.parse import quote
 
+from shiboken6 import isValid
+
 from PySide6.QtCore import QCoreApplication, QObject, QEvent, QUrl, QT_TRANSLATE_NOOP
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QPlainTextEdit
@@ -398,6 +400,9 @@ class CrashHandlerApp(QApplication):
     crash handler instead of silently printing and dropping them."""
 
     def notify(self, receiver: QObject, event: QEvent) -> bool:
+        if receiver is not None and not isValid(receiver):
+            logger.debug("Discarding queued event for a deleted Qt receiver")
+            return False
         try:
             return super().notify(receiver, event)
         except RuntimeError:
@@ -408,6 +413,9 @@ class CrashHandlerApp(QApplication):
             _handle_crash(exc_type, exc_value, exc_tb)
             return False
         except Exception:
+            if receiver is not None and not isValid(receiver):
+                logger.warning("Qt receiver was deleted during event delivery; discarding its event", exc_info=True)
+                return False
             exc_type, exc_value, exc_tb = sys.exc_info()
             _handle_crash(exc_type, exc_value, exc_tb)
             return False

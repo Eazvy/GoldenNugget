@@ -9,6 +9,11 @@ class NuggetException(Exception):
     def __str__(self):
         return self.message
 
+class BackupStorageError(NuggetException):
+    def __init__(self, message: str, location: str):
+        super().__init__(message)
+        self.location = location
+
 
 class BackupDiskSpaceError(NuggetException):
     """The computer's backup destination cannot satisfy a backup space check."""
