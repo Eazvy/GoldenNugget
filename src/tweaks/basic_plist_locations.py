@@ -31,6 +31,7 @@ class FileLocation(Enum):
     coreMotion = "/var/Managed Preferences/mobile/com.apple.CoreMotion.plist"
     pasteboard = "/var/Managed Preferences/mobile/com.apple.Pasteboard.plist"
     notes = "/var/Managed Preferences/mobile/com.apple.mobilenotes.plist"
+    keyboardPreferences = "/var/Managed Preferences/mobile/com.apple.keyboard.preferences.plist"
     uikit = "/var/Managed Preferences/mobile/com.apple.UIKit.plist"
     swiftui = "/var/Managed Preferences/mobile/com.apple.SwiftUI.plist"
 
