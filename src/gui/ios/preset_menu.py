@@ -16,6 +16,7 @@ import os
 import sys
 import weakref
 from typing import Optional
+from src.devicemanagement.device_capabilities import device_os_name
 
 from PySide6.QtCore import (
     Qt, QCoreApplication, QObject, QEvent, QPoint, QRect,
@@ -61,7 +62,7 @@ def preset_subtitle(meta: dict) -> str:
         return ""
     model = meta.get("device_model") or "Unknown"
     ios = meta.get("ios_version") or "Unknown"
-    text = _T("Nugget", "{0} • iOS {1}").format(model, ios)
+    text = _T("Nugget", "{0} • {1} {2}").format(model, device_os_name(model), ios)
     tags = meta.get("tags") or []
     if tags:
         text += "  #" + " #".join(tags)

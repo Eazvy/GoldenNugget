@@ -6,9 +6,10 @@ from src.devicemanagement.constants import Version
 # inside get_latest_version() instead of at module import. This module sits on
 # the GUI startup import graph (dialogs -> icon pack downloader).
 
-Nugget_Repo = "awesomenull-dev/GoldenNugget/releases/latest"
+Nugget_Repo = "GoldenNugget-Team/GoldenNugget/releases/latest"
 
 last_fetched_version: str = None
+last_fetched_release: dict = {}
 
 def is_update_available(version: str, build: int) -> bool:
     # check github for if version < tag (or == tag but build > 0)
@@ -21,7 +22,7 @@ def is_update_available(version: str, build: int) -> bool:
     return False
 
 def get_latest_version() -> str:
-    global last_fetched_version
+    global last_fetched_version, last_fetched_release
     # get the cached version
     if last_fetched_version != None:
         return last_fetched_version
@@ -33,6 +34,9 @@ def get_latest_version() -> str:
         response.raise_for_status()  # To raise an exception for 4xx/5xx responses
 
         data = response.json()  # Parse the JSON response
+        if not isinstance(data, dict):
+            return None
+        last_fetched_release = data
 
         # Check if "tag_name" exists in the response and compare the version
         tag_name = data.get("tag_name")
@@ -49,3 +53,27 @@ def get_latest_version() -> str:
     except JSONDecodeError as e:
         print(f"Error parsing JSON: {e}")
     return None
+def update_download_url():
+    import sys
+    import platform
+    from urllib.parse import quote, urlparse
+    suffixes = ('.dmg', '.zip') if sys.platform == 'darwin' else ('.exe', '.msi', '.zip') if sys.platform == 'win32' else ('.appimage', '.tar.gz')
+    assets = last_fetched_release.get('assets', [])
+    for suffix in suffixes:
+        for asset in assets if isinstance(assets, list) else []:
+            if not isinstance(asset, dict):
+                continue
+            name = str(asset.get('name', '')).lower()
+            url = asset.get('browser_download_url', '')
+            platform_words = ('mac', 'darwin', 'osx') if sys.platform == 'darwin' else ('win', 'windows') if sys.platform == 'win32' else ('linux', 'appimage')
+            arm = platform.machine().lower() in ('arm64', 'aarch64')
+            if (not arm and any(word in name for word in ('arm64', 'aarch64'))
+                    or arm and any(word in name for word in ('x86_64', 'x64', 'amd64', 'intel'))):
+                continue
+            if name.endswith(suffix) and (suffix in ('.dmg', '.exe', '.msi', '.appimage') or any(word in name for word in platform_words)):
+                if isinstance(url, str) and urlparse(url).scheme == 'https' and urlparse(url).hostname == 'github.com' and urlparse(url).path.startswith('/GoldenNugget-Team/GoldenNugget/releases/download/'):
+                    return url
+    tag = last_fetched_release.get('tag_name')
+    if isinstance(tag, str) and tag:
+        return 'https://github.com/GoldenNugget-Team/GoldenNugget/archive/refs/tags/' + quote(tag, safe='') + '.zip'
+    return 'https://github.com/GoldenNugget-Team/GoldenNugget/releases/latest'

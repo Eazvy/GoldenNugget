@@ -15,6 +15,7 @@ import threading
 # to the same class the backend uses).
 from src.utils.alerts import ApplyAlertMessage
 from src.exceptions.nugget_exception import NuggetException
+from src.restore.find_my_wait import FindMyWaitControl, ApplyCancelledError, current_find_my_wait
 
 
 class _SudoState:
@@ -63,11 +64,14 @@ class ApplyThread(QThread):
     def __init__(self, manager, settings: QSettings, reset_pages=None):
         super().__init__()
         self.manager = manager
+        self.find_my_wait = FindMyWaitControl()
         self.settings = settings
         self.reset_pages = reset_pages
         self.success = False
         self._error_msg: str = ""
         self.error_alert_sent = False
+        from src.restore.pause_control import RestorePauseControl
+        self.pause_control = RestorePauseControl(on_resume=self.manager._restore_eta.reset)
 
     def prompt_password(self, title: str, label: str) -> Optional[str]:
         # Modal dialogs must be built on the main thread (macOS raises
@@ -120,8 +124,16 @@ class ApplyThread(QThread):
             self._error_msg = ""
             log_context(f"FINISH {mode} OK")
             from src.controllers.apply_history import record_operation
-            record_operation(self.manager, mode, True)
+            record_operation(self.manager, mode, True, reset_pages=self.reset_pages)
             self.finished_with_result.emit(True, "")
+        except ApplyCancelledError as e:
+            self.success = False
+            self._error_msg = str(e)
+            self.error_alert_sent = True
+            self._log.info("%s cancelled while waiting for Find My", mode)
+            from src.controllers.apply_history import record_operation
+            record_operation(self.manager, mode, False, self._error_msg)
+            self.finished_with_result.emit(False, self._error_msg)
         except Exception as e:
             self.success = False
             self._error_msg = f"{type(e).__name__}: {e}"
@@ -174,6 +186,9 @@ class ApplyThread(QThread):
         self.alert.emit(msg)
 
     def _do_work(self):
+        from src.restore.pause_control import current_pause_control
+        pause_token = current_pause_control.set(self.pause_control)
+        find_my_token = current_find_my_wait.set(self.find_my_wait)
         self.manager.operation_stage_callback = self.operation_stage.emit
         try:
             if self.reset_pages is None:
@@ -183,6 +198,10 @@ class ApplyThread(QThread):
                                              self.alert_window, self.prompt_user_choice)
         finally:
             self.manager.operation_stage_callback = None
+            self.pause_control.finish()
+            current_pause_control.reset(pause_token)
+            self.find_my_wait.finish()
+            current_find_my_wait.reset(find_my_token)
 
 
 class RestoreCacheThread(QThread):
@@ -207,6 +226,7 @@ class RestoreCacheThread(QThread):
     def __init__(self, manager):
         super().__init__()
         self.manager = manager
+        self.find_my_wait = FindMyWaitControl()
         self._eta = None
 
     def prompt_user_choice(self, title: str, text: str) -> str:
@@ -239,6 +259,9 @@ class RestoreCacheThread(QThread):
             self._do_work()
             log_context("FINISH restore-cache OK")
             self.finished_with_result.emit(True, "")
+        except ApplyCancelledError as e:
+            log.info("Restore cancelled while waiting for Find My")
+            self.finished_with_result.emit(False, str(e))
         except Exception as e:
             traceback_str = traceback.format_exc()
             log.error("restore-cache failed: %s\n%s", e, traceback_str)
@@ -253,8 +276,12 @@ class RestoreCacheThread(QThread):
             self.finished_with_result.emit(False, f"{type(e).__name__}: {e}")
 
     def _do_work(self):
-        import asyncio
-        asyncio.run(self._restore())
+        token = current_find_my_wait.set(self.find_my_wait)
+        try:
+            asyncio.run(self._restore())
+        finally:
+            self.find_my_wait.finish()
+            current_find_my_wait.reset(token)
 
     async def _restore(self):
         from pathlib import Path
@@ -513,6 +540,7 @@ class DeviceMonitorThread(QThread):
     """Listen for usbmux attach/detach notifications without doing lockdownd I/O."""
 
     devices_changed = Signal()
+    usb_devices_changed = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -549,6 +577,7 @@ class DeviceMonitorThread(QThread):
                 if isinstance(mux, usbmux.PlistMuxConnection):
                     await asyncio.wait_for(mux.listen(), timeout=3)
                 known_devices = self._device_signature(mux.devices)
+                self.usb_devices_changed.emit(tuple(serial for serial, _, _ in known_devices))
                 pending_devices = known_devices
                 has_pending_change = False
 
@@ -559,6 +588,7 @@ class DeviceMonitorThread(QThread):
                         if has_pending_change:
                             if pending_devices != known_devices:
                                 known_devices = pending_devices
+                                self.usb_devices_changed.emit(tuple(serial for serial, _, _ in known_devices))
                                 self.devices_changed.emit()
                             has_pending_change = False
                         continue

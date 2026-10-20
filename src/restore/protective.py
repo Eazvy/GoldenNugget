@@ -37,6 +37,7 @@ import sys
 import tempfile
 import time
 import uuid as _uuid
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -53,7 +54,7 @@ from pymobiledevice3.services.mobilebackup2 import (
 
 from PySide6.QtCore import QCoreApplication
 
-from src.exceptions.nugget_exception import BackupDiskSpaceError, NuggetException
+from src.exceptions.nugget_exception import NuggetException, BackupStorageError, BackupDiskSpaceError
 from src.restore.afc_media import (  # noqa: F401  (re-exported public API)
     AFC_MEDIA_TREES,
     afc_media_dir_for,
@@ -127,12 +128,12 @@ def check_disk_space(path: str = None, min_free_bytes: int = None) -> None:
     if usage.free < min_free_bytes:
         free_gb = usage.free / (1024 ** 3)
         required_gb = min_free_bytes / (1024 ** 3)
-        raise BackupDiskSpaceError(
+        raise BackupStorageError(
             QCoreApplication.translate(
                 "Nugget",
                 "Not enough free disk space: only {0} GB available, at least {1} GB is required for the backup. "
                 "Free up space on your computer (backups are written to {2}) and try again.",
-            ).format(f"{free_gb:.1f}", f"{required_gb:.1f}", path)
+            ).format(f"{free_gb:.1f}", f"{required_gb:.1f}", path), location="computer"
         )
 
 
@@ -704,6 +705,29 @@ class ProtectiveBackupService(Mobilebackup2Service):
             ),
         )
 
+    @asynccontextmanager
+    async def device_link(self, backup_directory, filter_callback=None, password=""):
+        retryable = (_pm3_exc.ConnectionTerminatedError, ConnectionError, asyncio.TimeoutError)
+        stack = AsyncExitStack()
+        try:
+            for attempt in range(3):
+                try:
+                    link = await stack.enter_async_context(super().device_link(
+                        backup_directory, filter_callback=filter_callback, password=password))
+                    break
+                except retryable as error:
+                    log_warn(f"Backup service closed during DeviceLink handshake (attempt {attempt + 1}/3): {type(error).__name__}. This does not establish a USB disconnect.")
+                    try:
+                        await self.close()
+                    except Exception:
+                        pass
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(3 * (attempt + 1))
+            yield link
+        finally:
+            await stack.aclose()
+
     async def init_mobile_backup_factory_info(self, afc):
         root_node = self.lockdown.all_values
         info = {
@@ -906,8 +930,10 @@ async def perform_protective_backup(
                 message = str(e).strip() or backup_disk_space_message(backup_root)
                 log_warn(message)
                 if progress_callback:
-                    progress_callback(message)
-                raise BackupDiskSpaceError(message) from e
+                    progress_callback(QCoreApplication.translate(
+                        "Nugget", "The device ran out of storage during backup. Free space on the device and try again; tweaks were not applied."))
+                raise BackupStorageError(QCoreApplication.translate(
+                    "Nugget", "The device reported insufficient storage during backup. Free space on the device and try again. Tweaks were not applied."), location="device")
     except Exception:
         if afc_media_task is not None:
             # The backup failed — the media pull (still uploading user data) is
@@ -1537,4 +1563,3 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
             d.rmdir()
 
     return removed_rows, removed_files
-

@@ -1,7 +1,7 @@
 """Theme-aware Qt controls; the host supplies a theme via configure_theme."""
 from PySide6.QtCore import (
     Qt, QCoreApplication, Signal as pyqtSignal, QSize, QRectF,
-    QPropertyAnimation, QEasingCurve, Property, QEvent,
+    QPropertyAnimation, QEasingCurve, Property, QEvent, QTimer,
 )
 from PySide6.QtGui import QPainter, QColor, QIcon
 from PySide6.QtWidgets import (
@@ -47,9 +47,25 @@ class IOSSearchField(QLineEdit):
         self.clear()
         self.setFocus(Qt.OtherFocusReason)
 
+    def connect_filter(self, callback):
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(100)
+        timer.timeout.connect(callback)
+        self.textChanged.connect(lambda: timer.start())
+        self._filter_timer = timer
+
     def matches(self, *texts):
-        haystack = " ".join(texts).casefold()
-        return all(word in haystack for word in self.text().casefold().split())
+        if not hasattr(self, "_search_index"):
+            self._search_index = {}
+        key = tuple(text or "" for text in texts)
+        if key not in self._search_index:
+            self._search_index[key] = " ".join(key).casefold()
+        query = self.text()
+        if query != getattr(self, "_last_query", None):
+            self._last_query = query
+            self._search_words = query.casefold().split()
+        return all(word in self._search_index[key] for word in self._search_words)
 
     def _retheme(self):
         self.setStyleSheet(t("list_search"))
@@ -216,7 +232,7 @@ class IOSCollapsibleSection(QWidget):
     def _update_header_text(self):
         self.header.setText(
             f"{self.EXPANDED_CHEVRON if self._expanded else self.COLLAPSED_CHEVRON}"
-            f"  {self._title}{self._title_suffix}")
+            f"  {self._title.replace("&", "&&")}{self._title_suffix}")
 
     def toggle(self):
         self.set_expanded(not self._expanded)

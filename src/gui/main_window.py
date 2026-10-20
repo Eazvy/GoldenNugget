@@ -73,16 +73,16 @@ _CLASSIC_THEMED_ICONS = {
     "homePageBtn": ":/icon/house.svg",
     "gestaltPageBtn": ":/icon/iphone-island.svg",
     "euEnablerPageBtn": ":/icon/geo-alt.svg",
-    "statusBarPageBtn": ":/icon/wifi.svg",
-    "passcodePageBtn": ":/icon/lock.svg",
+    "statusBarPageBtn": ":/icon/features/status-bar.png",
+    "passcodePageBtn": ":/icon/features/passcode-theme.png",
     "springboardOptionsPageBtn": ":/icon/app-indicator.svg",
     "internalOptionsPageBtn": ":/icon/hdd.svg",
     "liquidGlassPageBtn": ":/icon/liquid-glass.svg",
-    "daemonsPageBtn": ":/icon/toggles.svg",
-    "iconThemesPageBtn": ":/icon/brush.svg",
+    "daemonsPageBtn": ":/icon/features/daemons.png",
+    "iconThemesPageBtn": ":/icon/features/icon-themes.png",
     "presetsPageBtn": ":/icon/folder.svg",
     "applyPageBtn": ":/icon/check-circle.svg",
-    "posterboardPageBtn": ":/icon/wallpaper.svg",
+    "posterboardPageBtn": ":/icon/features/posterboard.png",
     "settingsPageBtn": ":/icon/gear.svg",
     "mainDevBtn": ":/icon/github.svg",
     "discordBtn": ":/icon/discord.svg",
@@ -256,7 +256,9 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         nav_wrap_layout.setSpacing(0)
         nav_wrap_layout.addWidget(self.ios_nav)
         ios_root_layout.addWidget(nav_wrap)
-        ios_root_layout.addWidget(self.ios_pages)
+        ios_root_layout.addWidget(self.ios_pages, 1)
+        from src.gui.ios.bottom_navigation import BottomNavigation
+        self.bottom_navigation = BottomNavigation(self, ios_root)
 
         # Unified shell: classic sidebar + [classic home | iOS root | classic daemons].
         # The sidebar is the only survivor of the old UI chrome; most pages
@@ -308,6 +310,7 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         self.ui.devicePicker.currentIndexChanged.connect(self.change_selected_device)
         self._device_monitor_thread = DeviceMonitorThread(self)
         self._device_monitor_thread.devices_changed.connect(self.on_device_connection_changed)
+        self._device_monitor_thread.usb_devices_changed.connect(self.on_usb_devices_changed)
         self._device_monitor_thread.start()
         self.refresh_devices()
         # The refresh above runs on a worker thread, so the device list is still
@@ -356,15 +359,6 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
                     switch.setChecked(show_sidebar)
                 self.settings.setValue("ui/interface_choice_done", True)
                 self._sync_settings()
-
-        # First launch: choose the home top-bar widget (storage vs presets).
-        if not self.settings.contains("home_widget"):
-            from src.gui.interface_picker import HomeWidgetPickerDialog
-            picker = HomeWidgetPickerDialog(self)
-            picker.exec()
-            self.settings.setValue("home_widget", picker.choice or "presets")
-            self._sync_settings()
-            self.ios_home.set_home_widget(picker.choice or "presets")
 
         # First launch: remind the user to back up the device before tweaking
         # (keeps asking until they confirm a backup was made)
@@ -483,6 +477,18 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
                         worker.wait()
                     except RuntimeError:
                         pass
+        self._device_selection_closing = True
+        self._posterboard_waiting = {}
+        for worker in list(getattr(self, "_posterboard_selection_workers", {}).values()):
+            if _still_running(worker) and not worker.wait(2000):
+                event.ignore()
+                return
+        if not self.ios_home.stop_device_info():
+            event.ignore()
+            return
+        if not self.ios_home._device_preview.stop() or not self.ios_home._picker_preview.stop():
+            event.ignore()
+            return
         scan_worker = getattr(self, "refresh_worker_thread", None)
         if _still_running(scan_worker):
             try:

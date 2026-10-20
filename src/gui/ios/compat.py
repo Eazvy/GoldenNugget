@@ -8,7 +8,7 @@ import re
 from PySide6.QtCore import QCoreApplication
 
 from src.devicemanagement.constants import Version
-from src.devicemanagement.device_capabilities import has_dynamic_island
+from src.devicemanagement.device_capabilities import has_dynamic_island, has_camera_control, has_action_button, has_home_button, has_always_on_display, device_os_text
 from src.tweaks.registry import SPECS_BY_ID
 
 
@@ -38,7 +38,11 @@ def compatibility_reasons(tweak_id, device_version: str, model: str = "",
         return []
 
     reasons = []
-    tr = lambda text: QCoreApplication.translate("Compatibility", text)
+    tr = lambda text: device_os_text(QCoreApplication.translate("Compatibility", text), model)
+    if spec.disabled:
+        reasons.append(tr("this control is no longer supported"))
+    if spec.unavailable_reason:
+        reasons.append(tr(spec.unavailable_reason))
     parsed_device = None
     if device_version:
         try:
@@ -64,6 +68,14 @@ def compatibility_reasons(tweak_id, device_version: str, model: str = "",
         reasons.append(tr("is for iPhone only"))
     if spec.requires_dynamic_island and not has_dynamic_island(model):
         reasons.append(tr("requires an iPhone with Dynamic Island hardware"))
+    if spec.requires_camera_control and not has_camera_control(model):
+        reasons.append(tr("requires an iPhone with physical Camera Control"))
+    if spec.requires_always_on and not has_always_on_display(model):
+        reasons.append(tr("requires Always-On display hardware"))
+    if spec.requires_home_button and not has_home_button(model):
+        reasons.append(tr("requires a physical Home button"))
+    if spec.requires_action_button and not has_action_button(model):
+        reasons.append(tr("requires an iPhone with an Action Button"))
     return reasons
 
 

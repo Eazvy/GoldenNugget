@@ -22,6 +22,8 @@ from pymobiledevice3.lockdown import LockdownClient
 
 from src.devicemanagement.session import lockdown_session
 from src.exceptions.nugget_exception import NuggetException
+from src.exceptions.device_errors import is_device_lock_required_error
+from src.devicemanagement.progress_status import OperationStatus
 
 from pymobiledevice3.exceptions import ConnectionTerminatedError
 from pymobiledevice3.services.mobile_config import MobileConfigService
@@ -168,11 +170,14 @@ def build_cloud_config(existing: dict | None, supervised: bool = False,
 
 async def skip_all_setup27(ld: LockdownClient, udid: str | None = None,
                            supervised: bool = False,
-                           organization_name: str = ""):
+                           organization_name: str = "", progress_callback=None):
     last_error = None
-    for attempt in range(6):
+    attempt = 0
+    fresh_session = False
+    waiting_for_unlock = False
+    while attempt < 6:
         try:
-            if attempt == 0:
+            if not fresh_session:
                 async with MobileConfigService(lockdown=ld) as mcs:
                     cloud_config = build_cloud_config(
                         await mcs.get_cloud_configuration(),
@@ -180,20 +185,34 @@ async def skip_all_setup27(ld: LockdownClient, udid: str | None = None,
                         organization_name=organization_name)
                     await mcs.set_cloud_configuration(cloud_config)
             else:
-                async with lockdown_session(udid) as fresh_ld:
+                async with lockdown_session(udid, autopair=False) as fresh_ld:
                     async with MobileConfigService(lockdown=fresh_ld) as mcs:
                         cloud_config = build_cloud_config(
                             await mcs.get_cloud_configuration(),
                             supervised=supervised,
                             organization_name=organization_name)
                         await mcs.set_cloud_configuration(cloud_config)
+            if waiting_for_unlock and progress_callback:
+                progress_callback(OperationStatus("Device unlocked. Setup configuration completed.", "transfer_ready"))
             return
-        except (ConnectionTerminatedError, ConnectionError, OSError,
-                asyncio.TimeoutError) as error:
+        except Exception as error:
+            if is_device_lock_required_error(error):
+                waiting_for_unlock = True
+                fresh_session = bool(udid)
+                if progress_callback:
+                    progress_callback(OperationStatus(
+                        "Your device is locked. Enter its passcode to finish Setup. Keeping the operation open while waiting for you to unlock it…",
+                        "authentication"))
+                await asyncio.sleep(3)
+                continue
+            if not isinstance(error, (ConnectionTerminatedError, ConnectionError, OSError, asyncio.TimeoutError)):
+                raise
             last_error = error
-            if attempt == 5 or not udid:
+            attempt += 1
+            fresh_session = bool(udid)
+            if attempt >= 6 or not udid:
                 break
-            await asyncio.sleep(min(2 + attempt * 3, 15))
+            await asyncio.sleep(min(2 + (attempt - 1) * 3, 15))
     raise NuggetException(
         "The restore completed, but the device disconnected while GoldenNugget "
         "was configuring Setup Assistant. Keep the device connected and retry "

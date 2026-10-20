@@ -38,9 +38,9 @@ HIDE_ACTION = "hide_feature"
 
 # A rule with action == DISABLE_DAEMON_ACTION force-disables specific daemons
 # (field "daemons": a list of Daemon enum names or launchd keys) on matching
-# setups: the daemons are always added to the disabled-daemons plist at apply
-# time regardless of the UI toggles, their switches are locked ON in the page,
-# and presets cannot turn them back on (the apply pass re-forces them).
+# setups when daemon modifications are enabled. Their individual switches are
+# locked ON in the page, and the apply pass re-forces them while the master
+# switch remains enabled.
 DISABLE_DAEMON_ACTION = "disable_daemon"
 
 # A rule with action == RISK_ACTION never blocks anything: it attaches a

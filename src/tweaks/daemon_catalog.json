@@ -1,0 +1,1718 @@
+{
+  "build": "24B5110a",
+  "model": "iPhone16,2",
+  "services": [
+    {
+      "name": "appinstallationmetricsd",
+      "label": "com.apple.AppInstallationMetrics",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.appinstallationmetricsd.plist",
+      "title": "Disable App Installation Reports",
+      "description": "Stops reports about app installations."
+    },
+    {
+      "name": "geoanalyticsd",
+      "label": "com.apple.geoanalyticsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.geoanalyticsd.plist",
+      "title": "Disable Location Reports",
+      "description": "Stops location-related usage reports."
+    },
+    {
+      "name": "hangtelemetryd",
+      "label": "com.apple.hangtelemetryd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.hangtelemetryd.plist",
+      "title": "Disable App Freeze Reports",
+      "description": "Stops collecting reports about apps that freeze or stop responding."
+    },
+    {
+      "name": "fitnessintelligenced",
+      "label": "com.apple.fitnessintelligenced",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.fitnessintelligenced.plist",
+      "title": "Disable Fitness Insights",
+      "description": "Stops personalized activity insights updating."
+    },
+    {
+      "name": "generativelearningd",
+      "label": null,
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Generative Learning",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "icloudsubscriptionoptimizerd",
+      "label": "com.apple.icloudsubscriptionoptimizerd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.icloudsubscriptionoptimizerd.plist",
+      "title": "Disable iCloud Subscription Helper",
+      "description": "Stops an iCloud subscription helper."
+    },
+    {
+      "name": "gamepolicyd",
+      "label": "com.apple.gamepolicyd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.gamepolicyd.plist",
+      "title": "Disable Game Performance Management",
+      "description": "May change Game Mode and game performance."
+    },
+    {
+      "name": "batteryintelligenced",
+      "label": "com.apple.batteryintelligenced",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.batteryintelligenced.plist",
+      "title": "Disable Battery Analysis",
+      "description": "Stops background battery analysis."
+    },
+    {
+      "name": "anomalydetectiond",
+      "label": "com.apple.anomalydetectiond",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.anomalydetectiond.plist",
+      "title": "Disable Unusual-Event Detection",
+      "description": "Stops a hidden event-detection service."
+    },
+    {
+      "name": "callintelligenced",
+      "label": "com.apple.callintelligenced",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.callintelligenced.plist",
+      "title": "Disable Smart Calling Features",
+      "description": "Stops calling features that use this service."
+    },
+    {
+      "name": "appmanagedfeaturesd",
+      "label": "com.apple.appmanagedfeaturesd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.appmanagedfeaturesd.plist",
+      "title": "Disable Managed App Features",
+      "description": "Interrupts checks for apps managed by an organization or administrator."
+    },
+    {
+      "name": "appprotectiond",
+      "label": "com.apple.appprotectiond",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.appprotectiond.plist",
+      "title": "Disable App Protection Helper",
+      "description": "Stops an app-protection service."
+    },
+    {
+      "name": "iconservicesagent",
+      "label": "com.apple.iconservices.iconservicesagent",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.iconservices.iconservicesagent.plist",
+      "title": "Disable App Icons",
+      "description": "Can remove icons from the Home Screen, App Library and Dock."
+    },
+    {
+      "name": "memoryanalyticsd",
+      "label": "com.apple.memoryanalyticsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.memoryanalyticsd.plist",
+      "title": "Disable Memory Use Reports",
+      "description": "Stops collecting reports about memory use."
+    },
+    {
+      "name": "biomesyncd",
+      "label": "com.apple.biomesyncd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.biomesyncd.plist",
+      "title": "Disable Activity Data Sync",
+      "description": "Stops sharing activity data used by suggestions between devices."
+    },
+    {
+      "name": "eligibilityd",
+      "label": "com.apple.eligibilityd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.eligibilityd.plist",
+      "title": "Disable Feature Availability Checks",
+      "description": "Interrupts checks for which features your device can use."
+    },
+    {
+      "name": "eventkitsyncd",
+      "label": "com.apple.eventkitsyncd",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.eventkitsyncd.plist",
+      "title": "Disable Watch Calendar Sync",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "mlhostd",
+      "label": "com.apple.mlhostd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.mlhostd.plist",
+      "title": "Disable Background AI Tasks",
+      "description": "Stops features that need this service's background AI tasks."
+    },
+    {
+      "name": "inboxupdaterd",
+      "label": "com.apple.inboxupdaterd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.inboxupdaterd.plist",
+      "title": "Disable Inbox Updater",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "visioncompaniond",
+      "label": "com.apple.visioncompaniond",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.visioncompaniond.plist",
+      "title": "Disable Vision Companion Helper",
+      "description": "Interrupts companion-device features."
+    },
+    {
+      "name": "icloudmailagent",
+      "label": "com.apple.icloudmailagent",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.icloudmailagent.plist",
+      "title": "Disable iCloud Mail Helper",
+      "description": "Stops background iCloud Mail tasks from completing."
+    },
+    {
+      "name": "aggregated",
+      "label": null,
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Combined Usage Reports",
+      "description": "Stops a usage-report service."
+    },
+    {
+      "name": "attributionkitd",
+      "label": "com.apple.attributionkitd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.attributionkitd.plist",
+      "title": "Disable Ad Download Measurement",
+      "description": "Stops measuring which ads lead to app downloads."
+    },
+    {
+      "name": "wirelessinsightsd",
+      "label": "com.apple.wirelessinsightsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.wirelessinsightsd.plist",
+      "title": "Disable Wireless Connection Reports",
+      "description": "Stops collecting wireless connection information for troubleshooting."
+    },
+    {
+      "name": "axauditd",
+      "label": "com.apple.accessibility.axAuditDaemon.deviceservice",
+      "scope": "device",
+      "source": "Library/DeveloperModeLaunchDaemons/com.apple.accessibility.axAuditDaemon.deviceservice.plist",
+      "title": "Disable Accessibility Inspection",
+      "description": "Stops accessibility checks used by app inspection and development tools."
+    },
+    {
+      "name": "bookdatastored",
+      "label": "com.apple.bookdatastored",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.bookdatastored.plist",
+      "title": "Disable Books Library Data",
+      "description": "Interrupts access to book library information and updates."
+    },
+    {
+      "name": "bookassetd",
+      "label": "com.apple.bookassetd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.bookassetd.plist",
+      "title": "Disable Book Downloads",
+      "description": "Stops books downloading or opening."
+    },
+    {
+      "name": "calaccessd",
+      "label": "com.apple.calaccessd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.calaccessd.plist",
+      "title": "Disable Calendar Data Service",
+      "description": "Stops calendars being read, changed or synced."
+    },
+    {
+      "name": "callhistoryd",
+      "label": "com.apple.callhistoryd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.callhistoryd.plist",
+      "title": "Disable Recent Call History",
+      "description": "Stops recent calls being saved or synced between devices."
+    },
+    {
+      "name": "chronod",
+      "label": "com.apple.chronod",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.chronod.plist",
+      "title": "Disable Widget Refreshing",
+      "description": "Stops widgets refreshing in the background."
+    },
+    {
+      "name": "cloudphotod",
+      "label": "com.apple.cloudphotod",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.cloudphotod.plist",
+      "title": "Disable iCloud Photos Sync",
+      "description": "Stops photos and videos uploading to or downloading from iCloud."
+    },
+    {
+      "name": "donotdisturbd",
+      "label": "com.apple.donotdisturbd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.donotdisturbd.plist",
+      "title": "Disable Focus Mode",
+      "description": "Stops Focus controls opening, schedules running or modes changing."
+    },
+    {
+      "name": "photoanalysisd",
+      "label": "com.apple.photoanalysisd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.photoanalysisd.plist",
+      "title": "Disable Photo Content Analysis",
+      "description": "Stops people recognition, photo search and Memories updating."
+    },
+    {
+      "name": "stickersd",
+      "label": "com.apple.stickersd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.stickersd.plist",
+      "title": "Disable Sticker Service",
+      "description": "Interrupts sticker creation or make stickers unavailable in apps."
+    },
+    {
+      "name": "storekitd",
+      "label": "com.apple.storekitd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.storekitd.plist",
+      "title": "Disable In-App Purchases",
+      "description": "Interrupts purchases and subscription checks inside apps."
+    },
+    {
+      "name": "appstorecomponentsd",
+      "label": "com.apple.appstorecomponentsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.appstorecomponentsd.plist",
+      "title": "Disable App Store Helpers",
+      "description": "Interrupts App Store content or features that use its helper services."
+    },
+    {
+      "name": "avatarsd",
+      "label": "com.apple.avatarsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.avatarsd.plist",
+      "title": "Disable Memoji Service",
+      "description": "Stops Memoji being created, changed or made available to apps."
+    },
+    {
+      "name": "medialibraryd",
+      "label": "com.apple.medialibraryd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.medialibraryd.plist",
+      "title": "Disable Media Library Service",
+      "description": "Stops apps reading or updating music and other media library information."
+    },
+    {
+      "name": "mediaartworkd",
+      "label": "com.apple.mediaartworkd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.mediaartworkd.plist",
+      "title": "Disable Album Cover Downloads",
+      "description": "Stops album covers and other media artwork loading or updating."
+    },
+    {
+      "name": "schooltimed",
+      "label": null,
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Schooltime",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "liveactivitiesd",
+      "label": "com.apple.liveactivitiesd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.liveactivitiesd.plist",
+      "title": "Disable Live Activity Updates",
+      "description": "Stops Live Activities updating on the Lock Screen and Dynamic Island."
+    },
+    {
+      "name": "contactsd",
+      "label": "com.apple.contactsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.contactsd.plist",
+      "title": "Disable Contacts Service",
+      "description": "Stops contacts being read, edited or synced."
+    },
+    {
+      "name": "postersyncd",
+      "label": "com.apple.contacts.postersyncd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.contacts.postersyncd.plist",
+      "title": "Disable Contact Poster Sync",
+      "description": "Stops contact photos and posters syncing between devices."
+    },
+    {
+      "name": "fileproviderd",
+      "label": "com.apple.FileProvider",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.FileProvider.plist",
+      "title": "Disable Cloud File Access",
+      "description": "Stops cloud documents appearing, downloading or opening in Files and other apps."
+    },
+    {
+      "name": "axremoted",
+      "label": "com.apple.accessibility.axremoted",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.accessibility.axremoted.plist",
+      "title": "Disable Remote Accessibility Control",
+      "description": "Interrupts accessibility features that control another device."
+    },
+    {
+      "name": "motiontrackingd",
+      "label": "com.apple.accessibility.motiontrackingd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.accessibility.motiontrackingd.plist",
+      "title": "Disable Accessibility Motion Tracking",
+      "description": "Interrupts accessibility features that use this service's movement tracking."
+    },
+    {
+      "name": "appconduitd",
+      "label": "com.apple.appconduitd",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.appconduitd.plist",
+      "title": "Disable Watch App Transfers",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "biomed",
+      "label": "com.apple.biomed",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.biomed.plist",
+      "title": "Disable Activity-Based Suggestions Data",
+      "description": "Stops processing activity data used by system suggestions."
+    },
+    {
+      "name": "ckdiscretionaryd",
+      "label": "com.apple.ckdiscretionaryd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.ckdiscretionaryd.plist",
+      "title": "Disable Background iCloud Task Scheduling",
+      "description": "May delay or stop background iCloud database syncing for apps."
+    },
+    {
+      "name": "companioncamerad",
+      "label": "com.apple.companioncamerad",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.companioncamerad.plist",
+      "title": "Disable Watch Camera Remote",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "dataaccessd",
+      "label": "com.apple.dataaccess.dataaccessd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.dataaccess.dataaccessd.plist",
+      "title": "Disable Account Data Sync",
+      "description": "Stops Mail, Contacts and Calendar syncing data for accounts that use this service."
+    },
+    {
+      "name": "exchangesyncd",
+      "label": "com.apple.exchangesyncd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.exchangesyncd.plist",
+      "title": "Disable Exchange Account Sync",
+      "description": "Stops mail, contacts and calendars syncing for Exchange accounts."
+    },
+    {
+      "name": "eyedropperd",
+      "label": "com.apple.uikit.eyedropperd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.uikit.eyedropperd.plist",
+      "title": "Disable Screen Color Picker",
+      "description": "Stops the color picker sampling colors from the screen."
+    },
+    {
+      "name": "fontservicesd",
+      "label": "com.apple.fontservicesd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.fontservicesd.plist",
+      "title": "Disable Font Loading Service",
+      "description": "Interrupts font loading or cause text to display incorrectly."
+    },
+    {
+      "name": "homeenergyd",
+      "label": "com.apple.homeenergyd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.homeenergyd.plist",
+      "title": "Disable Home Energy Updates",
+      "description": "Stops energy-related features in Home updating."
+    },
+    {
+      "name": "homeeventsd",
+      "label": "com.apple.homeeventsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.homeeventsd.plist",
+      "title": "Disable Home Event Helper",
+      "description": "Interrupts smart-home features that use this helper."
+    },
+    {
+      "name": "jetpackassetd",
+      "label": "com.apple.jetpackassetd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.jetpackassetd.plist",
+      "title": "Disable Jetpack Content Helper",
+      "description": "Stops a hidden content-download helper."
+    },
+    {
+      "name": "mstreamd",
+      "label": "com.apple.mediastream.mstreamd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.mediastream.mstreamd.plist",
+      "title": "Disable Photo Stream Helper",
+      "description": "Interrupts photo-stream features that still use this service."
+    },
+    {
+      "name": "nanoappregistryd",
+      "label": "com.apple.nanoappregistryd",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.nanoappregistryd.plist",
+      "title": "Disable Watch App List Service",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "pairedsyncd",
+      "label": "com.apple.pairedsyncd",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.pairedsyncd.plist",
+      "title": "Disable Watch Device Sync",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "pointeruid",
+      "label": "com.apple.PointerUI.pointeruid",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.PointerUI.pointeruid.plist",
+      "title": "Disable Mouse and Trackpad Pointer",
+      "description": "Stops the on-screen mouse or trackpad pointer working."
+    },
+    {
+      "name": "previewsd",
+      "label": "com.apple.dt.previewsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.dt.previewsd.plist",
+      "title": "Disable App Design Previews",
+      "description": "Stops development tools previewing an app's interface on the connected device."
+    },
+    {
+      "name": "replicatord",
+      "label": "com.apple.replicatord",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.replicatord.plist",
+      "title": "Disable Data Copy Helper",
+      "description": "Stops a hidden data-copy service."
+    },
+    {
+      "name": "contentlinkingd",
+      "label": "com.apple.synapse.contentlinkingd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.synapse.contentlinkingd.plist",
+      "title": "Disable Related Content Links",
+      "description": "Stops links and suggestions based on related content."
+    },
+    {
+      "name": "cloudtelemetryd",
+      "label": "com.apple.cloudtelemetryd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.cloudtelemetryd.plist",
+      "title": "Disable iCloud Diagnostic Reports",
+      "description": "Stops collecting troubleshooting reports about cloud services."
+    },
+    {
+      "name": "filederivatived",
+      "label": "com.apple.filederivatived",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.filederivatived.plist",
+      "title": "Disable File Preview Copy Generation",
+      "description": "Stops apps creating alternate versions of files they need."
+    },
+    {
+      "name": "shazameventsd",
+      "label": "com.apple.shazameventsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.shazameventsd.plist",
+      "title": "Disable Music Recognition History Updates",
+      "description": "Stops recognized-song events being processed and added to history."
+    },
+    {
+      "name": "siriappintentsd",
+      "label": "com.apple.siriappintentsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.siriappintentsd.plist",
+      "title": "Disable Siri App Actions",
+      "description": "Stops Siri and Shortcuts running actions provided by apps."
+    },
+    {
+      "name": "visualintelligenced",
+      "label": "com.apple.visualintelligenced",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.visualintelligenced.plist",
+      "title": "Disable Visual Intelligence",
+      "description": "Stops features that understand images or what the camera sees."
+    },
+    {
+      "name": "agentstored",
+      "label": "com.apple.GenerativeFunctions.agentstored",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.GenerativeFunctions.agentstored.plist",
+      "title": "Disable AI Task Storage Helper",
+      "description": "Interrupts AI tasks that use this storage helper."
+    },
+    {
+      "name": "cksharingmanagementd",
+      "label": "com.apple.cksharingmanagementd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.cksharingmanagementd.plist",
+      "title": "Disable Shared iCloud App Data",
+      "description": "Interrupts shared app data and invitations that use iCloud databases."
+    },
+    {
+      "name": "messagesescrowd",
+      "label": "com.apple.messagesescrowd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.messagesescrowd.plist",
+      "title": "Disable Messages Recovery Helper",
+      "description": "Stops a Messages recovery-related helper."
+    },
+    {
+      "name": "imageplaygroundd",
+      "label": "com.apple.imageplaygroundd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.imageplaygroundd.plist",
+      "title": "Disable Image Playground",
+      "description": "Stops Image Playground generating images."
+    },
+    {
+      "name": "callverificationd",
+      "label": "com.apple.callverificationd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.callverificationd.plist",
+      "title": "Disable Call Verification Helper",
+      "description": "Interrupts call-verification features."
+    },
+    {
+      "name": "cameraispd",
+      "label": "com.apple.cameraispd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.cameraispd.plist",
+      "title": "Disable Camera Image Processing",
+      "description": "Stops the camera taking photos or video."
+    },
+    {
+      "name": "clocksyncd",
+      "label": "com.apple.clocksyncd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.clocksyncd.plist",
+      "title": "Disable Device Clock Sync Helper",
+      "description": "Stops a low-level clock-sync helper."
+    },
+    {
+      "name": "dbtelemetryd",
+      "label": "com.apple.libsqlite3.dbtelemetryd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.libsqlite3.dbtelemetryd.plist",
+      "title": "Disable Database Error Reports",
+      "description": "Stops collecting database troubleshooting reports."
+    },
+    {
+      "name": "diagnosticscheckupd",
+      "label": "com.apple.diagnosticscheckupd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.diagnosticscheckupd.plist",
+      "title": "Disable Diagnostic Checkups",
+      "description": "Stops system troubleshooting checks that use this service."
+    },
+    {
+      "name": "fpassetmanagerd",
+      "label": "com.apple.fpassetmanagerd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.fpassetmanagerd.plist",
+      "title": "Disable Cloud File Download Helper",
+      "description": "Stops cloud documents downloading through file-provider apps."
+    },
+    {
+      "name": "hybridsearchd",
+      "label": "com.apple.hybridsearchd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.hybridsearchd.plist",
+      "title": "Disable Combined Search Helper",
+      "description": "May leave results missing in features that use this search service."
+    },
+    {
+      "name": "riskdatad",
+      "label": "com.apple.riskdatad",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.riskdatad.plist",
+      "title": "Disable Risk Assessment Helper",
+      "description": "Stops a hidden risk-checking service."
+    },
+    {
+      "name": "sharereportingd",
+      "label": "com.apple.sharereportingd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.sharereportingd.plist",
+      "title": "Disable Sharing Report Helper",
+      "description": "Stops Apple's sharing-report service."
+    },
+    {
+      "name": "symptomsd-darwin",
+      "label": "com.apple.symptomsd-darwin",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.symptomsd-darwin.plist",
+      "title": "Disable System Health Reports",
+      "description": "May reduce troubleshooting information about system problems."
+    },
+    {
+      "name": "audioclocksyncd",
+      "label": null,
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Audio Clock Sync",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "inputanalyticsd",
+      "label": "com.apple.inputanalyticsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.inputanalyticsd.plist",
+      "title": "Disable Input Usage Reports",
+      "description": "Stops collecting troubleshooting reports about user input."
+    },
+    {
+      "name": "metrickitd",
+      "label": "com.apple.metrickitd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.metrickitd.plist",
+      "title": "Disable App Performance Reports",
+      "description": "Stops apps receiving reports about crashes, freezes, memory use and performance."
+    },
+    {
+      "name": "photosfaced",
+      "label": "com.apple.photosface",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.photosface.plist",
+      "title": "Disable Photos Face Helper",
+      "description": "Stops the Photos Face helper."
+    },
+    {
+      "name": "screenshotsyncd",
+      "label": "com.apple.screenshotsyncd",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.screenshotsyncd.plist",
+      "title": "Disable Watch Screenshot Sync",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "sportsd",
+      "label": "com.apple.sportsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.sportsd.plist",
+      "title": "Disable Sports Updates",
+      "description": "Stops scores and other sports information updating."
+    },
+    {
+      "name": "wifivelocityd",
+      "label": "com.apple.wifivelocityd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.wifivelocityd.plist",
+      "title": "Disable Wi-Fi Troubleshooting Helper",
+      "description": "Stops Wi-Fi troubleshooting data being collected."
+    },
+    {
+      "name": "textunderstandingd",
+      "label": "com.apple.textunderstandingd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.textunderstandingd.plist",
+      "title": "Disable Text Understanding",
+      "description": "Interrupts system features that interpret the meaning of text."
+    },
+    {
+      "name": "proactiveeventtrackerd",
+      "label": "com.apple.proactiveeventtrackerd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.proactiveeventtrackerd.plist",
+      "title": "Disable Activity-Based Event Suggestions",
+      "description": "Stops event suggestions based on your activity updating."
+    },
+    {
+      "name": "locationpushd",
+      "label": "com.apple.locationpushd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.locationpushd.plist",
+      "title": "Disable Remote Location Update Helper",
+      "description": "Stops features that request location updates remotely."
+    },
+    {
+      "name": "modelmanagerd",
+      "label": "com.apple.modelmanagerd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.modelmanagerd.plist",
+      "title": "Disable AI Model Loading",
+      "description": "Stops AI features loading or updating the files they need."
+    },
+    {
+      "name": "gamesaved",
+      "label": "com.apple.gamesaved",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.gamesaved.plist",
+      "title": "Disable Game Save Helper",
+      "description": "Stops games saving progress or syncing saves."
+    },
+    {
+      "name": "syncdefaultsd",
+      "label": "com.apple.syncdefaultsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.syncdefaultsd.plist",
+      "title": "Disable Settings Sync",
+      "description": "Stops app or system settings syncing between devices."
+    },
+    {
+      "name": "securityuploadd",
+      "label": "com.apple.securityuploadd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.securityuploadd.plist",
+      "title": "Disable Security Report Uploads",
+      "description": "Stops uploading security-related troubleshooting reports."
+    },
+    {
+      "name": "watchlistd",
+      "label": "com.apple.watchlistd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.watchlistd.plist",
+      "title": "Disable TV Watchlist Updates",
+      "description": "Stops TV watchlists updating."
+    },
+    {
+      "name": "swiftuitraced",
+      "label": "com.apple.swiftuitracingsupport.xpc",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.swiftuitraced.plist",
+      "title": "Disable App Interface Tracing",
+      "description": "Stops interface troubleshooting traces used by development tools."
+    },
+    {
+      "name": "soundanalysisd",
+      "label": "com.apple.soundanalysisd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.soundanalysisd.plist",
+      "title": "Disable Sound Recognition Service",
+      "description": "Stops features that identify or analyze sounds."
+    },
+    {
+      "name": "siriknowledged",
+      "label": "com.apple.siriknowledged",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.siriknowledged.plist",
+      "title": "Disable Siri Knowledge Helper",
+      "description": "Affects Siri answers and suggestions that use this helper."
+    },
+    {
+      "name": "powerdatad",
+      "label": "com.apple.powerdatad",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.powerdatad.plist",
+      "title": "Disable Power Use Reports",
+      "description": "Stops collecting battery and power-use troubleshooting data."
+    },
+    {
+      "name": "facemetricsd",
+      "label": "com.apple.facemetricsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.facemetricsd.plist",
+      "title": "Disable Face Metrics Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "contactsdonationagent",
+      "label": "com.apple.contacts.donation-agent",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.contacts.donation-agent.plist",
+      "title": "Disable Contact Suggestions Data",
+      "description": "Stops contact information being shared with system suggestion features."
+    },
+    {
+      "name": "voicebankingd",
+      "label": "com.apple.voicebankingd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.voicebankingd.plist",
+      "title": "Disable Personal Voice Processing",
+      "description": "Stops Personal Voice creating or processing a saved voice."
+    },
+    {
+      "name": "voicememod",
+      "label": "com.apple.voicememod",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.voicememod.plist",
+      "title": "Disable Voice Memos Background Tasks",
+      "description": "Stops Voice Memos managing recordings or syncing them."
+    },
+    {
+      "name": "amsondevicestoraged",
+      "label": "com.apple.amsondevicestoraged",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.amsondevicestoraged.plist",
+      "title": "Disable Apple Media Storage Helper",
+      "description": "Interrupts locally stored data used by Apple media and store features."
+    },
+    {
+      "name": "intelligencetasksd",
+      "label": "com.apple.intelligencetasksd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.intelligencetasksd.plist",
+      "title": "Disable Background Intelligence Tasks",
+      "description": "Stops AI features completing background work or updating results."
+    },
+    {
+      "name": "accessoryupdaterd",
+      "label": "com.apple.accessoryupdaterd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.accessoryupdaterd.plist",
+      "title": "Disable Accessory Software Updates",
+      "description": "Stops accessories receiving software updates."
+    },
+    {
+      "name": "magicswitchd",
+      "label": "com.apple.magicswitchd.companion",
+      "scope": "watch",
+      "source": "Library/NanoLaunchDaemons/com.apple.magicswitchd.companion.plist",
+      "title": "Disable Watch Automatic Switching",
+      "description": "Watch-side service; not offered for iPhone or iPad."
+    },
+    {
+      "name": "deferredmediad",
+      "label": "com.apple.deferredmediad",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.deferredmediad.plist",
+      "title": "Disable Photo and Video Finishing",
+      "description": "May leave captured photos or videos without their final background processing."
+    },
+    {
+      "name": "mediaplaybackd",
+      "label": "com.apple.mediaplaybackd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.mediaplaybackd.plist",
+      "title": "Disable Media Playback Helper",
+      "description": "Stops audio or video playing in apps that depend on this service."
+    },
+    {
+      "name": "mediasetupd",
+      "label": "com.apple.mediasetupd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.mediasetupd.plist",
+      "title": "Disable Media Setup Helper",
+      "description": "Stops a hidden media-setup service."
+    },
+    {
+      "name": "enhancedloggingd",
+      "label": "com.apple.enhancedloggingd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.enhancedloggingd.plist",
+      "title": "Disable Extra System Logs",
+      "description": "Stops additional system troubleshooting logs."
+    },
+    {
+      "name": "betaenrollmentd",
+      "label": "com.apple.betaenrollmentd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.betaenrollmentd.plist",
+      "title": "Disable Beta Update Enrollment",
+      "description": "Stops the device joining a beta software update program."
+    },
+    {
+      "name": "remoteappintentsd",
+      "label": "com.apple.remoteappintentsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.remoteappintentsd.plist",
+      "title": "Disable App Actions Across Devices",
+      "description": "Stops app actions running between devices."
+    },
+    {
+      "name": "safetyalertsd",
+      "label": "com.apple.safetyalertsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.safetyalertsd.plist",
+      "title": "Disable Safety Alert Helper",
+      "description": "May prevent safety alerts that depend on this service."
+    },
+    {
+      "name": "relatived",
+      "label": "com.apple.relatived",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.relatived.plist",
+      "title": "Disable Relative Service",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "naturallanguaged",
+      "label": "com.apple.naturallanguaged",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.naturallanguaged.plist",
+      "title": "Disable System Text Analysis",
+      "description": "Interrupts text features that analyze language or meaning."
+    },
+    {
+      "name": "textcontextd",
+      "label": "com.apple.textcontextd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.Archetype.textcontextd.plist",
+      "title": "Disable Context-Aware Text Help",
+      "description": "Interrupts text assistance that uses nearby words or context."
+    },
+    {
+      "name": "ospredictiond",
+      "label": "com.apple.ospredictiond",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.ospredictiond.plist",
+      "title": "Disable Battery Predictions",
+      "description": "Stops battery and charging predictions updating."
+    },
+    {
+      "name": "locationaccessstored",
+      "label": "com.apple.locationaccessstored",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.locationaccessstored.plist",
+      "title": "Disable Location Access History",
+      "description": "Stops location-access records used by privacy reporting being saved."
+    },
+    {
+      "name": "powerexperienced",
+      "label": "com.apple.powerexperienced",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.powerexperienced.plist",
+      "title": "Disable Power Mode Management",
+      "description": "Interrupts power modes and battery-related system behavior."
+    },
+    {
+      "name": "powerexceptionsd",
+      "label": "com.apple.powerexceptionsd",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.powerexceptionsd.plist",
+      "title": "Disable Power Limit Exception Helper",
+      "description": "Interrupts system checks for tasks exceeding power limits."
+    },
+    {
+      "name": "proximitycontrold",
+      "label": "com.apple.proximitycontrold",
+      "scope": "device",
+      "source": "Library/LaunchDaemons/com.apple.proximitycontrold.plist",
+      "title": "Disable Nearby Device Controls",
+      "description": "Interrupts interactions and controls between nearby devices."
+    },
+    {
+      "name": "risk_email_maild",
+      "label": "com.apple.email.maild",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.email.maild.plist",
+      "title": "Disable Mail Background Tasks",
+      "description": "Stops Mail reading, updating or managing stored messages."
+    },
+    {
+      "name": "risk_intelligenceflowd",
+      "label": "com.apple.intelligenceflowd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.intelligenceflowd.plist",
+      "title": "Disable Apple Intelligence Requests",
+      "description": "Stops Apple Intelligence completing requests on devices."
+    },
+    {
+      "name": "risk_remindd",
+      "label": "com.apple.remindd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.remindd.plist",
+      "title": "Disable Reminders Data Service",
+      "description": "Stops reminders being saved, synced or shown as alerts."
+    },
+    {
+      "name": "risk_intelligencecontextd",
+      "label": "com.apple.intelligencecontextd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.intelligencecontextd.plist",
+      "title": "Disable Apple Intelligence Context",
+      "description": "Stops Apple Intelligence using context needed to answer requests."
+    },
+    {
+      "name": "risk_suggestd",
+      "label": "com.apple.suggestd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.suggestd.plist",
+      "title": "Disable System Suggestions",
+      "description": "Stops contact, event and other system suggestions updating."
+    },
+    {
+      "name": "risk_amsengagementd",
+      "label": "com.apple.amsengagementd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.amsengagementd.plist",
+      "title": "Disable Apple Media Suggestions Helper",
+      "description": "Stops a media-engagement helper."
+    },
+    {
+      "name": "risk_generativeexperiencesd",
+      "label": "com.apple.generativeexperiencesd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.generativeexperiencesd.plist",
+      "title": "Disable AI Content Features",
+      "description": "Stops Apple Intelligence features that generate content."
+    },
+    {
+      "name": "risk_intelligenceplatformd",
+      "label": "com.apple.intelligenceplatformd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.intelligenceplatformd.plist",
+      "title": "Disable Apple Intelligence Background Service",
+      "description": "Stops Apple Intelligence features completing background work."
+    },
+    {
+      "name": "risk_merchantd",
+      "label": "com.apple.merchantd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.merchantd.plist",
+      "title": "Disable Apple Pay Merchant Helper",
+      "description": "Interrupts merchant-related parts of Apple Pay."
+    },
+    {
+      "name": "risk_financed",
+      "label": "com.apple.financed",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.financed.plist",
+      "title": "Disable Shared Financial Data Access",
+      "description": "Stops apps accessing financial data through Apple's financial-data service."
+    },
+    {
+      "name": "risk_navd",
+      "label": "com.apple.navd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.navd.plist",
+      "title": "Disable Navigation Helper",
+      "description": "Interrupts navigation features that depend on this service."
+    },
+    {
+      "name": "risk_weatherd",
+      "label": "com.apple.weatherd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.weatherd.plist",
+      "title": "Disable Weather Updates",
+      "description": "Stops forecasts and weather widgets updating."
+    },
+    {
+      "name": "risk_ScreenTimeSettingsAgent",
+      "label": "com.apple.ScreenTimeSettingsAgent",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.ScreenTimeSettingsAgent.plist",
+      "title": "Disable Screen Time Settings",
+      "description": "Stops Screen Time settings opening or saving; existing restrictions can remain."
+    },
+    {
+      "name": "risk_FamilyControlsAgent",
+      "label": "com.apple.FamilyControlsAgent",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.FamilyControlsAgent.plist",
+      "title": "Disable Parental Control Management",
+      "description": "Stops parental-control management; existing restrictions can remain."
+    },
+    {
+      "name": "risk_peopled",
+      "label": "com.apple.peopled",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.peopled.plist",
+      "title": "Disable People Suggestions",
+      "description": "Stops people and contact suggestions updating."
+    },
+    {
+      "name": "risk_corespeechd",
+      "label": "com.apple.corespeechd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.corespeechd.plist",
+      "title": "Disable Speech Processing",
+      "description": "Stops Siri and other features that process speech."
+    },
+    {
+      "name": "risk_fitnesscoachingd",
+      "label": "com.apple.fitnesscoachingd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.fitnesscoachingd.plist",
+      "title": "Disable Fitness Coaching",
+      "description": "Stops personalized fitness guidance updating."
+    },
+    {
+      "name": "risk_sirittsd",
+      "label": "com.apple.sirittsd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.sirittsd.plist",
+      "title": "Disable Siri Spoken Answers",
+      "description": "Stops Siri speaking its answers."
+    },
+    {
+      "name": "risk_assetsd_nebulad",
+      "label": "com.apple.assetsd.nebulad",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.assetsd.nebulad.plist",
+      "title": "Disable Camera Helper",
+      "description": "Stops a camera helper."
+    },
+    {
+      "name": "risk_ap_promotedcontentd",
+      "label": "com.apple.ap.promotedcontentd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.ap.promotedcontentd.plist",
+      "title": "Disable Apple Promoted Content",
+      "description": "Stops Apple promotional content loading."
+    },
+    {
+      "name": "risk_modelcatalogd",
+      "label": "com.apple.modelcatalogd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.modelcatalogd.plist",
+      "title": "Disable AI Model Lookup",
+      "description": "Stops AI features finding the files they need to run."
+    },
+    {
+      "name": "risk_assetsd",
+      "label": "com.apple.assetsd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.assetsd.plist",
+      "title": "Disable Photos Library Service",
+      "description": "Stops Photos opening, saving or updating the library."
+    },
+    {
+      "name": "risk_mediaanalysisd",
+      "label": "com.apple.mediaanalysisd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.mediaanalysisd.plist",
+      "title": "Disable Media Content Analysis",
+      "description": "Stops photo, video and audio content analysis updating."
+    },
+    {
+      "name": "risk_sociallayerd",
+      "label": "com.apple.sociallayerd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.sociallayerd.plist",
+      "title": "Disable Shared Content Helper",
+      "description": "Interrupts features that show shared content."
+    },
+    {
+      "name": "risk_SafariBookmarksSyncAgent",
+      "label": "com.apple.SafariBookmarksSyncAgent",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.SafariBookmarksSyncAgent.plist",
+      "title": "Disable Safari Bookmark Sync",
+      "description": "Stops Safari bookmarks syncing between devices."
+    },
+    {
+      "name": "risk_WebBookmarks_webbookmarksd",
+      "label": "com.apple.WebBookmarks.webbookmarksd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.WebBookmarks.webbookmarksd.plist",
+      "title": "Disable Bookmark Data Service",
+      "description": "Stops bookmarks being read, changed or synced."
+    },
+    {
+      "name": "risk_ap_adprivacyd",
+      "label": "com.apple.ap.adprivacyd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.ap.adprivacyd.plist",
+      "title": "Disable Advertising Privacy Helper",
+      "description": "Interrupts advertising privacy processing."
+    },
+    {
+      "name": "risk_Safari_passwordbreachd",
+      "label": "com.apple.Safari.passwordbreachd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.Safari.passwordbreachd.plist",
+      "title": "Disable Leaked Password Warnings",
+      "description": "Stops warnings that a saved password appeared in a known data leak."
+    },
+    {
+      "name": "risk_finhealthd",
+      "label": "com.apple.finhealthd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.finhealthd.plist",
+      "title": "Disable Financial Health Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "risk_sleepd",
+      "label": "com.apple.sleepd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.sleepd.plist",
+      "title": "Disable Sleep Background Service",
+      "description": "Stops sleep-related information or features updating."
+    },
+    {
+      "name": "risk_GameController_gamecontrollerd",
+      "label": "com.apple.GameController.gamecontrollerd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.GameController.gamecontrollerd.plist",
+      "title": "Disable Game Controllers",
+      "description": "Stops connected game controllers responding in apps."
+    },
+    {
+      "name": "risk_ClipServices_clipserviced",
+      "label": "com.apple.ClipServices.clipserviced",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.ClipServices.clipserviced.plist",
+      "title": "Disable App Clips",
+      "description": "Stops App Clips downloading or opening."
+    },
+    {
+      "name": "risk_nanoprefsyncd_2",
+      "label": "com.apple.nanoprefsyncd.2",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.nanoprefsyncd.plist",
+      "title": "Disable Apple Watch Settings Sync",
+      "description": "Stops settings syncing with Apple Watch."
+    },
+    {
+      "name": "risk_assistant_cdmd",
+      "label": "com.apple.assistant_cdmd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.assistant_cdmd.plist",
+      "title": "Disable Siri Conversation Helper",
+      "description": "Interrupts Siri conversations and follow-up requests."
+    },
+    {
+      "name": "risk_revisiond",
+      "label": "com.apple.revisiond",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.revisiond.plist",
+      "title": "Disable Saved Document Versions",
+      "description": "Stops document versions being saved or reopened."
+    },
+    {
+      "name": "risk_webprivacyd",
+      "label": "com.apple.webprivacyd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.webprivacyd.plist",
+      "title": "Disable Web Privacy Helper",
+      "description": "Interrupts web privacy protections."
+    },
+    {
+      "name": "risk_nanoregistrylaunchd",
+      "label": "com.apple.nanoregistrylaunchd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.nanoregistrylaunchd.plist",
+      "title": "Disable Apple Watch Service Startup",
+      "description": "Stops Apple Watch companion services starting."
+    },
+    {
+      "name": "risk_knowledgeconstructiond",
+      "label": "com.apple.knowledgeconstructiond",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.knowledgeconstructiond.plist",
+      "title": "Disable AI Knowledge Updates",
+      "description": "Stops background knowledge and suggestions used by AI features updating."
+    },
+    {
+      "name": "risk_Maps_mapssyncd",
+      "label": "com.apple.Maps.mapssyncd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.Maps.mapssyncd.plist",
+      "title": "Disable Maps Sync",
+      "description": "Stops Maps information syncing between devices."
+    },
+    {
+      "name": "risk_mlruntimed",
+      "label": "com.apple.mlruntimed",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.mlruntimed.plist",
+      "title": "Disable Background AI Processing",
+      "description": "Interrupts features that need this background AI service."
+    },
+    {
+      "name": "risk_musicd",
+      "label": "com.apple.musicd",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.musicd.plist",
+      "title": "Disable Music Background Service",
+      "description": "Stops music playing or the music library updating."
+    },
+    {
+      "name": "risk_tvremoted",
+      "label": "com.apple.tvremoted",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.tvremoted.plist",
+      "title": "Disable Apple TV Remote",
+      "description": "Stops the device controlling Apple TV."
+    },
+    {
+      "name": "risk_mediaanalysisd_service",
+      "label": "com.apple.mediaanalysisd.service",
+      "scope": "iphone",
+      "source": "System/Library/LaunchDaemons/com.apple.mediaanalysisd.service.plist",
+      "title": "Disable Media Analysis Helper",
+      "description": "Stops photo, video or audio analysis that depends on this helper."
+    },
+    {
+      "name": "risk_apsd",
+      "label": "com.apple.apsd",
+      "scope": "iphone",
+      "source": "GoldenNugget_129_Daemons_Explained.csv; core system service",
+      "title": "Disable Push Notifications",
+      "description": "Can stop push notifications and app updates triggered by them."
+    },
+    {
+      "name": "BatteryUsage",
+      "label": "com.apple.powerlogd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Battery Usage History",
+      "description": "Stops battery-use history and power statistics updating."
+    },
+    {
+      "name": "Aggregated",
+      "label": "com.apple.aggregated",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Combined Usage Reports",
+      "description": "Stops combined app-use and system diagnostic reports being collected."
+    },
+    {
+      "name": "Geniusd",
+      "label": "com.apple.appleseedd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Apple Beta Feedback Helper",
+      "description": "Stops Apple beta-feedback tasks and related troubleshooting reports."
+    },
+    {
+      "name": "OTAPackd",
+      "label": "com.apple.otapackd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Update Package Processing",
+      "description": "Stops software-update packages being prepared or processed."
+    },
+    {
+      "name": "CoreCaptured",
+      "label": "com.apple.corecaptured",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Network Troubleshooting Capture",
+      "description": "Stops detailed network troubleshooting information being recorded."
+    },
+    {
+      "name": "Pcapd",
+      "label": "com.apple.pcapd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Network Traffic Capture",
+      "description": "Stops troubleshooting tools recording network traffic."
+    },
+    {
+      "name": "IMETrafficCollector",
+      "label": "com.apple.imetrafficcollector",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable IME Reporting Helper",
+      "description": "Stops a hidden reporting helper."
+    },
+    {
+      "name": "CoreTelephonyAnalytics",
+      "label": "com.apple.commcenter.coretelephony",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Cellular Connection Helper",
+      "description": "Interrupts calls or cellular data."
+    },
+    {
+      "name": "CoreTelephony",
+      "label": "com.apple.coretelephony",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Cellular Service Helper",
+      "description": "Interrupts calls, cellular data or network information."
+    },
+    {
+      "name": "Runwayd",
+      "label": "com.apple.generatord",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Generator Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "Mld",
+      "label": "com.apple.mlt",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable MLT Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "AppStoreAnalytics",
+      "label": "com.apple.appstored",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable App Store Background Service",
+      "description": "Stops App Store downloads, updates and other store actions."
+    },
+    {
+      "name": "CommerceAnalytics",
+      "label": "com.apple.Commerced",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Store Purchase Helper",
+      "description": "Interrupts store purchases or checks for purchased content."
+    },
+    {
+      "name": "SaleAnalytics",
+      "label": "com.apple.saled",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Sale Helper",
+      "description": "Stops a hidden store-related helper."
+    },
+    {
+      "name": "RepairAnalytics",
+      "label": "com.apple.repaird",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Repair Helper",
+      "description": "Interrupts repair-related checks or tasks."
+    },
+    {
+      "name": "Recalibration",
+      "label": "com.apple.recalibrationd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Recalibration Helper",
+      "description": "Stops a hidden adjustment service."
+    },
+    {
+      "name": "PrivacyAnalytics",
+      "label": "com.apple.privacyd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Privacy Helper",
+      "description": "Stops a hidden privacy service."
+    },
+    {
+      "name": "CipherMining",
+      "label": "com.apple.cipherminingd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Cipher Mining Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "LifeScienceAnalytics",
+      "label": "com.apple.lifescienced",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Life Science Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "SiriUnattended",
+      "label": "com.apple.siriunattended",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Background Siri Tasks",
+      "description": "Stops Siri tasks that run without an active conversation."
+    },
+    {
+      "name": "SiriService",
+      "label": "com.apple.SiriService",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Siri Request Service",
+      "description": "Stops Siri answering requests or running actions."
+    },
+    {
+      "name": "SiriCore",
+      "label": "com.apple.siri",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Main Siri Service",
+      "description": "Stops Siri and features that depend on it."
+    },
+    {
+      "name": "SearchPartyd",
+      "label": "com.apple.searchpartyd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Find My Network Helper",
+      "description": "Interrupts nearby-item discovery and other Find My network features."
+    },
+    {
+      "name": "Nearbyd",
+      "label": "com.apple.nearbyd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Nearby Device Helper",
+      "description": "Interrupts features that find or interact with nearby devices."
+    },
+    {
+      "name": "NearbyInteraction",
+      "label": "com.apple.nearbyinteractiond",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Precise Nearby Distance",
+      "description": "Stops apps measuring the distance or direction to nearby devices."
+    },
+    {
+      "name": "FindMyDevice",
+      "label": "com.apple.findmydeviced",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Find My Device Helper",
+      "description": "Stops device locating."
+    },
+    {
+      "name": "FindMyLocate",
+      "label": "com.apple.findmylocate",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Find My Location Updates",
+      "description": "Stops location updates used by Find My."
+    },
+    {
+      "name": "GazeTracking",
+      "label": "com.apple.gaze",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Eye Gaze Helper",
+      "description": "Interrupts features that use eye direction."
+    },
+    {
+      "name": "Sportskitd",
+      "label": "com.apple.sportskitd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Sports Information Helper",
+      "description": "Stops sports scores and related information updating."
+    },
+    {
+      "name": "ARKitTracking",
+      "label": "com.apple.arkitd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Augmented Reality Helper",
+      "description": "Interrupts apps that track the camera view to place virtual objects in the real world."
+    },
+    {
+      "name": "FaceTracking",
+      "label": "com.apple.faced",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Face Helper",
+      "description": "The effect of stopping this service is unknown."
+    },
+    {
+      "name": "MediaTracking",
+      "label": "com.apple.mediasessiond",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Playback Session Helper",
+      "description": "Interrupts playback controls and coordination between media apps."
+    },
+    {
+      "name": "MediaRemoteControl",
+      "label": "com.apple.mediaremotecontrol",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Remote Playback Controls",
+      "description": "Stops remote devices or accessories controlling playback."
+    },
+    {
+      "name": "IMessageTracking",
+      "label": "com.apple.imagent",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Messaging Background Service",
+      "description": "Interrupts iMessage, FaceTime or related account connections."
+    },
+    {
+      "name": "IMFoundation",
+      "label": "com.apple.imfoundation",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Messaging Helper",
+      "description": "Interrupts messaging features that depend on this helper."
+    },
+    {
+      "name": "IMTranscoding",
+      "label": "com.apple.imtranscodingagent",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Message Attachment Conversion",
+      "description": "Stops attachments being converted into a format that can be sent or opened."
+    },
+    {
+      "name": "ContinuityTracking",
+      "label": "com.apple.continuityd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Cross-Device Features",
+      "description": "Interrupts Handoff and other actions between Apple devices."
+    },
+    {
+      "name": "Osanalyticsd",
+      "label": "com.apple.osanalyticsd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable System Diagnostic Reports",
+      "description": "Stops operating-system problem reports being collected or processed."
+    },
+    {
+      "name": "Microstackshots",
+      "label": "com.apple.microstackshots",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Short Performance Reports",
+      "description": "Stops brief system performance samples used to investigate slowdowns."
+    },
+    {
+      "name": "StackshotServer",
+      "label": "com.apple.stackshot.server",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Detailed Performance Reports",
+      "description": "Stops detailed snapshots used to investigate freezes and other system problems."
+    },
+    {
+      "name": "CrashReporterSupport",
+      "label": "com.apple.CrashReporterSupportHelper",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Crash Report Processing",
+      "description": "Stops crash reports being prepared or processed."
+    },
+    {
+      "name": "CloudStorage",
+      "label": "com.apple.cloudd",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable iCloud App Data Sync",
+      "description": "Stops apps syncing data through iCloud databases."
+    },
+    {
+      "name": "CloudKeychain",
+      "label": "com.apple.cloudkeychainproxy",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable iCloud Password Sync",
+      "description": "Stops passwords and other saved security items syncing through iCloud."
+    },
+    {
+      "name": "ScreenTime",
+      "label": "com.apple.ScreenTimeAgent",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Screen Time Activity Reports",
+      "description": "Stops activity reports; existing app and website restrictions can remain."
+    },
+    {
+      "name": "ManagedSettingsAgent",
+      "label": "com.apple.ManagedSettingsAgent",
+      "scope": "unconfirmed",
+      "source": null,
+      "title": "Disable Restriction Settings Helper",
+      "description": "Interrupts app and website restrictions; existing limits can remain."
+    }
+  ]
+}
