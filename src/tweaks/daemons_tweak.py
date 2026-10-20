@@ -686,3 +686,13 @@ INTERFACE_KEYS = INTERFACE_KEYS | frozenset(
 RISKY_DAEMONS += (Daemon.ScreenTime, Daemon.ManagedSettingsAgent)
 INTERFACE_KEYS = INTERFACE_KEYS | frozenset(
     key for daemon in (Daemon.ScreenTime, Daemon.ManagedSettingsAgent) for key in daemon.value)
+
+
+RECOMMENDED_ANALYTICS = [
+    Daemon.Diagnostics, Daemon.UsageTrackingAgent,
+    Daemon.AppleAds, Daemon.Feedback,
+    Daemon.SettingsStats, Daemon.WifiAnalytics, Daemon.AnalyticsHelper,
+    Daemon.AudioAnalytics, Daemon.EcosystemAnalytics,
+    Daemon.Insight, Daemon.Metrics, Daemon.StatisticalDiagnostic,
+    Daemon.WirelessDiagnostics,
+]

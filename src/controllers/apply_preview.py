@@ -106,6 +106,15 @@ def capture_preview(manager):
         if tid in (TweakID.Daemons, TweakID.ClearScreenTimeAgentPlist) and not daemons_enabled:
             continue
         spec = SPECS_BY_ID.get(tid)
+        title = spec.title if spec else tid.name
+        section = spec.section.value if spec else tid.name
+        selected = bool(tweak.enabled or getattr(tweak, "tendies", [])
+                        or getattr(tweak, "templates", []) or getattr(tweak, "themes", [])
+                        or getattr(tweak, "videoFile", None))
+        if tid.name in hidden or hotload.rule_for(tid, **context) is not None:
+            if selected:
+                blocked.append(title)
+            continue
         if spec is not None and spec.experimental:
             model = context["device_model"] or ""
             if (spec.unavailable_reason
@@ -117,15 +126,6 @@ def capture_preview(manager):
                     or (spec.requires_camera_control and not has_camera_control(model))
                     or (spec.requires_dynamic_island and not has_dynamic_island(model))):
                 continue
-        title = spec.title if spec else tid.name
-        section = spec.section.value if spec else tid.name
-        selected = bool(tweak.enabled or getattr(tweak, "tendies", [])
-                        or getattr(tweak, "templates", []) or getattr(tweak, "themes", [])
-                        or getattr(tweak, "videoFile", None))
-        if tid.name in hidden or hotload.rule_for(tid, **context) is not None:
-            if selected:
-                blocked.append(title)
-            continue
         if tid == TweakID.PosterBoard:
             for item in tweak.tendies[:MAX_TENDIES_PER_RESTORE]:
                 queued.append(("PosterBoard", item.name))

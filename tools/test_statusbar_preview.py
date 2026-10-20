@@ -8,10 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src' / 'qt'))
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from PySide6.QtCore import QTime
+from PySide6.QtCore import QTime, QRectF
+from PySide6.QtGui import QImage, QPainter, QColor
 from PySide6.QtWidgets import QApplication
 
-from src.gui.ios.statusbar_preview import MAX_BARS, MAX_WIFI_BARS, StatusBarPreview, preview_state
+from src.gui.ios.statusbar_preview import MAX_BARS, MAX_WIFI_BARS, paint_status_bar, preview_state
 from src.tweaks.status_bar.status_setter import StatusBarItem
 
 APP = QApplication.instance() or QApplication([])
@@ -79,16 +80,20 @@ class PreviewState(unittest.TestCase):
         self.assertIsNone(state.wifi_bars)
         self.assertFalse(state.show_cellular)
 
-    def test_widget_paints_every_state(self):
-        widget = StatusBarPreview()
-        widget.resize(960, widget.heightForWidth(960))
-        for manager in (FakeStatusBar(enabled=False), FakeStatusBar(**self.FULL),
-                        FakeStatusBar(carrier='x' * 200, primary_service_badge='', gsm_signal_strength_bars=0,
-                                      hidden={StatusBarItem.MainBatteryStatusBarItem})):
-            widget.set_state(preview_state(manager, ios27=False, now=NOON))
-            image = widget.grab().toImage()
-            self.assertFalse(image.isNull())
-        self.assertGreater(widget.heightForWidth(960), widget.heightForWidth(400))
+    def test_device_status_renderer_paints_every_state(self):
+        for width in (393, 600, 960):
+            for manager in (FakeStatusBar(enabled=False), FakeStatusBar(**self.FULL),
+                            FakeStatusBar(carrier='x' * 200, primary_service_badge='', gsm_signal_strength_bars=0,
+                                          hidden={StatusBarItem.MainBatteryStatusBarItem})):
+                state = preview_state(manager, ios27=False, now=NOON)
+                for lock_screen in (False, True):
+                    image = QImage(width, 200, QImage.Format_ARGB32)
+                    image.fill(QColor('#202020'))
+                    before = image.copy()
+                    painter = QPainter(image)
+                    paint_status_bar(painter, QRectF(0, 0, width, 200), state, lock_screen)
+                    painter.end()
+                    self.assertNotEqual(image, before)
 
 
 if __name__ == '__main__':

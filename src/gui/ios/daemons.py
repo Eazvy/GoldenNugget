@@ -434,7 +434,9 @@ class IOSDaemonsContent(QWidget):
         layout.addStretch()
         self.refresh_from_tweaks()
         self._viewport_rows.request()
-        self.window.ios_daemons._applied_theme_revision = ColorThemeManager.instance().revision
+        page = getattr(self.window, "ios_daemons", None)
+        if page is not None:
+            page._applied_theme_revision = ColorThemeManager.instance().revision
 
     def _organize_rows(self):
         from src.gui.ios.daemon_categories import CATEGORY_ORDER, DAEMON_CATEGORIES, REPORTS_CATEGORY, ACCOUNTS_CATEGORY

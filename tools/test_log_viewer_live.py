@@ -27,7 +27,7 @@ os.environ["GOLDENNUGGET_LOG_FILE"] = os.path.join(_TMP_DIR, "session.log")
 
 import logging
 from PySide6.QtCore import QEventLoop, QTimer, QSettings
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QStackedWidget, QApplication, QWidget
 
 app = QApplication.instance() or QApplication([])
 
@@ -57,6 +57,12 @@ class FakeDM:
     devices = []
     pref_manager = None
 
+    def get_current_device_model(self):
+        return ""
+
+    def get_current_device_version(self):
+        return ""
+
     def get_current_device_udid(self):
         return None
 
@@ -75,6 +81,7 @@ class FakeWindow(QWidget):
         super().__init__()
         self.settings = QSettings(os.path.join(_TMP_DIR, "settings.ini"), QSettings.IniFormat)
         self.device_manager = FakeDM()
+        self.ios_pages = QStackedWidget(self)
 
     def show_ios_page(self, i):
         pass
@@ -107,15 +114,15 @@ page.show()
 pump()
 
 print("1) the button opens the viewer")
-page._logs_btn.click()
+page.open_logs()
 pump()
-check("the home header button created a viewer", len(created) == 1)
+check("the shared log action created a viewer", len(created) == 1)
 dlg = created[0]
 check("it reads the session log", dlg._path == get_log_path(), dlg._path)
 check("the session log was redirected out of AppData",
       _TMP_DIR in dlg._path, dlg._path)
 check("its poll timer is running", dlg._timer.isActive())
-check("the icon on the button rendered", not page._logs_btn.icon().isNull())
+check("the log viewer belongs to the main window", dlg.parentWidget() is page.window)
 check("Live mode is on by default", dlg._follow.isChecked())
 
 print("2) writes reach the view while the timer runs")

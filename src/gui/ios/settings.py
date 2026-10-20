@@ -328,8 +328,17 @@ class IOSSettingsPage(QWidget):
             matches += visible_rows
         self.search_empty.setVisible(searching and matches == 0)
 
+    def _style_label(self, label, key):
+        label.setProperty('theme_style_key', key)
+        label.setStyleSheet(t(key))
+
+
     def _retheme(self):
         c = self._tm.colors
+        for widget in [*self.findChildren(QLabel), *self.findChildren(QAbstractButton)]:
+            style_key = widget.property('theme_style_key')
+            if style_key:
+                widget.setStyleSheet(t(style_key))
         self._scroll.setStyleSheet(
             f"background-color: {c.bg_primary}; border: none;"
         )
@@ -402,7 +411,7 @@ class IOSSettingsPage(QWidget):
         row.setSpacing(12)
 
         label = QLabel(title)
-        label.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
+        self._style_label(label, 'row_title')
         label.setWordWrap(True)
         row.addWidget(label, 1)
 
@@ -587,15 +596,14 @@ class IOSSettingsPage(QWidget):
         row.setSpacing(8)
 
         title = QLabel(QCoreApplication.translate("Nugget", "Backup/Cache Location"))
-        title.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
+        self._style_label(title, 'row_title')
         row.addWidget(title)
 
         custom = self._custom_backup_dir_value()
         self.backup_location_lbl = QLabel(
             custom if custom else self._default_backup_dir_text())
         self.backup_location_lbl.setWordWrap(True)
-        self.backup_location_lbl.setStyleSheet(
-            f"color: {c.text_secondary}; font-size: 13px;")
+        self._style_label(self.backup_location_lbl, 'muted_caption')
         row.addWidget(self.backup_location_lbl)
 
         hint = QLabel(QCoreApplication.translate(
@@ -604,7 +612,7 @@ class IOSSettingsPage(QWidget):
             "backup/restore files for iOS 27 are stored in this folder. "
             "Useful when the system drive is small (e.g. C: 28 GB)."))
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {c.text_secondary}; font-size: 12px;")
+        self._style_label(hint, 'small_hint')
         row.addWidget(hint)
 
         btns = QHBoxLayout()
@@ -654,11 +662,11 @@ class IOSSettingsPage(QWidget):
         row.setSpacing(12)
 
         label = QLabel(title)
-        label.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
+        self._style_label(label, 'row_title')
         row.addWidget(label, 1)
 
         self.org_value_lbl = QLabel(current if current else QCoreApplication.translate("MainWindow", "None"))
-        self.org_value_lbl.setStyleSheet(f"color: {c.text_secondary}; font-size: 14px;")
+        self._style_label(self.org_value_lbl, 'value_label')
         row.addWidget(self.org_value_lbl)
 
         edit_btn = QPushButton(self)
@@ -722,7 +730,7 @@ class IOSSettingsPage(QWidget):
         row.setSpacing(12)
 
         label = QLabel(QCoreApplication.translate("Nugget", "App Language"))
-        label.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
+        self._style_label(label, 'row_title')
         row.addWidget(label, 1)
 
         self.lang_drp = QComboBox()
@@ -775,7 +783,7 @@ class IOSSettingsPage(QWidget):
         ids_layout.setContentsMargins(16, 12, 16, 12)
         ids_layout.setSpacing(8)
         ids_title = QLabel(QCoreApplication.translate("Nugget", "Saved Configuration IDs"))
-        ids_title.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
+        self._style_label(ids_title, 'row_title')
         ids_layout.addWidget(ids_title)
 
         self.saved_ids_list = QListWidget()
@@ -802,11 +810,11 @@ class IOSSettingsPage(QWidget):
         row.setSpacing(12)
 
         label = QLabel(title)
-        label.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
+        self._style_label(label, 'row_title')
         row.addWidget(label, 1)
 
         self.pb_db_lbl = QLabel(value)
-        self.pb_db_lbl.setStyleSheet(f"color: {c.text_secondary}; font-size: 14px;")
+        self._style_label(self.pb_db_lbl, 'value_label')
         row.addWidget(self.pb_db_lbl)
         self.content_layout.addWidget(card)
 
@@ -937,21 +945,12 @@ class IOSSettingsPage(QWidget):
 
     def _make_mini_button(self, title: str):
         from PySide6.QtWidgets import QPushButton
-        c = self._tm.colors
         btn = QPushButton(title)
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {c.scrollbar};
-                border: none;
-                border-radius: 10px;
-                color: {c.text_primary};
-                font-size: 13px;
-                padding: 8px 12px;
-            }}
-            QPushButton:hover {{ background-color: {c.surface_hover}; }}
-        """)
+        btn.setProperty('theme_style_key', 'mini_button')
+        btn.setStyleSheet(t('mini_button'))
         return btn
+
 
     def _on_pb_get_db(self):
         from src.gui.dialogs import PosterBoardDBWizard
@@ -1085,7 +1084,7 @@ class IOSSettingsPage(QWidget):
             "for this session only — an existing AutoSave preset stays on "
             "disk and is not loaded at startup."))
         autosave_hint.setWordWrap(True)
-        autosave_hint.setStyleSheet(f"color: {c.text_secondary}; font-size: 12px;")
+        self._style_label(autosave_hint, 'small_hint')
         hint_row = QHBoxLayout()
         hint_row.setContentsMargins(16, 0, 16, 8)
         hint_row.addWidget(autosave_hint, 1)

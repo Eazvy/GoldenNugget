@@ -930,10 +930,8 @@ async def perform_protective_backup(
                 message = str(e).strip() or backup_disk_space_message(backup_root)
                 log_warn(message)
                 if progress_callback:
-                    progress_callback(QCoreApplication.translate(
-                        "Nugget", "The device ran out of storage during backup. Free space on the device and try again; tweaks were not applied."))
-                raise BackupStorageError(QCoreApplication.translate(
-                    "Nugget", "The device reported insufficient storage during backup. Free space on the device and try again. Tweaks were not applied."), location="device")
+                    progress_callback(message)
+                raise BackupDiskSpaceError(message) from e
     except Exception:
         if afc_media_task is not None:
             # The backup failed — the media pull (still uploading user data) is

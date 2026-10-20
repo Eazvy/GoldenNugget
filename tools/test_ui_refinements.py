@@ -19,7 +19,7 @@ from src.gui.dialogs.reset_dialog import ResetDialog
 from src.gui.ios.components import IOSSearchField, IOSSummaryDialog, IOSSwitch
 from src.gui.ios.settings import IOSSettingsPage
 from src.gui.ios.operation_result import OperationResultCard
-from src.gui.ios.support_panel import SupportPanel
+from src.gui.ios.support_panel import SupportPanel, CommunityLinks
 from src.gui.theme import ColorThemeManager
 from src.restore.protective import ProtectiveBackupService
 from pymobiledevice3.services.mobilebackup2 import (
@@ -138,11 +138,11 @@ class UIRefinementTests(unittest.TestCase):
 
     def test_support_links_open_only_when_clicked(self):
         with patch("src.gui.ios.support_panel.QDesktopServices.openUrl") as open_url:
-            panel = SupportPanel()
+            panel = CommunityLinks()
             open_url.assert_not_called()
-            panel.discord.click()
+            panel._links[0][0].click()
             self.assertEqual(open_url.call_args.args[0].toString(), "https://discord.gg/F7ssrHjdgK")
-            panel.github.click()
+            panel._links[1][0].click()
             self.assertEqual(open_url.call_args.args[0].toString(),
                              "https://github.com/GoldenNugget-Team/GoldenNugget")
         panel.deleteLater()

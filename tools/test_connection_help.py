@@ -107,7 +107,7 @@ class DeviceReconnectTests(unittest.TestCase):
         error = ConnectionFailedError("got an error message: {'MessageType': 'Result', 'Number': 3}")
 
         @asynccontextmanager
-        async def connection(serial):
+        async def connection(serial, **kwargs):
             raise error
             yield  # Keep the mock an async context manager.
 
