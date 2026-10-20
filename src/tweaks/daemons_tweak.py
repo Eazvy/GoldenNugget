@@ -42,6 +42,7 @@ DANGEROUS_KEYS = frozenset({
     'com.apple.itunesstored',
     'com.apple.mobile.lockdown',
     'com.apple.mobile.usermanagerd',
+    'com.apple.decisiond',
 })
 
 class Daemon(Enum):
@@ -436,7 +437,7 @@ INTERFACE_DAEMONS: frozenset["Daemon"] = frozenset({
     Daemon.AudioAnalytics, Daemon.EcosystemAnalytics,
     Daemon.CoreDuet, Daemon.Insight, Daemon.Metrics, Daemon.MediaExperience,
     Daemon.Symptomsd, Daemon.StatisticalDiagnostic, Daemon.WirelessDiagnostics,
-    Daemon.DuetHeuristic, Daemon.DuetExpert, Daemon.Decisiond, Daemon.Triald,
+    Daemon.DuetHeuristic, Daemon.DuetExpert, Daemon.Triald,
     Daemon.Sociald,
     Daemon.Diagnostics, Daemon.AppleAds, Daemon.Feedback, Daemon.Shazam, Daemon.SettingsStats,
 })
