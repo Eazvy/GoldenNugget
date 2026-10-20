@@ -231,10 +231,6 @@ async def _wait_for_device(udid: str, progress_callback,
                         last_error = NotPairedError(
                             "re-pair completed but lockdownd still reports "
                             "the host as unpaired")
-                    except (MuxException, ConnectionTerminatedError,
-                            ConnectionError, OSError, asyncio.TimeoutError) as e2:
-                        last_error = e2
-                        autopair_tried = False
                     except (MissingValueError, LockdownError,
                             PairingError, FatalPairingError,
                             DeviceNotFoundError, ConnectionFailedError,
