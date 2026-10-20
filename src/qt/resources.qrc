@@ -1,5 +1,12 @@
 <RCC>
     <qresource prefix="/">
+        <file>icon/features/community-catalog.png</file>
+        <file>icon/features/daemons.png</file>
+        <file>icon/features/icon-themes.png</file>
+        <file>icon/features/passcode-theme.png</file>
+        <file>icon/features/posterboard.png</file>
+        <file>icon/features/status-bar.png</file>
+        <file>icon/features/tweaks.png</file>
         <file>credits/LeminLimez.png</file>
         <file>credits/awesomenull.png</file>
         <file>credits/windows11aero.png</file>
