@@ -49,6 +49,8 @@ class PosterBoardFailures(unittest.IsolatedAsyncioTestCase):
     async def test_apply_does_not_restore_or_record_success_after_failed_fetch(self):
         manager = Mock()
         manager.get_current_device_partially_supported.return_value = False
+        manager.get_current_device_version.return_value = "26.2"
+        manager.get_current_device_model.return_value = "iPhone16,1"
         manager._backup_posterboard_database = AsyncMock(side_effect=ConnectionError("USB disconnected"))
         manager._apply_tweak_pass = AsyncMock()
         pb = SimpleNamespace(tendies=[object()], videoFile=None)
@@ -85,14 +87,25 @@ class NotificationRecovery(unittest.TestCase):
         # The real widget exercises refresh and switch synchronization too.
         window = SimpleNamespace(settings=None, device_manager=None)
         content = IOSDaemonsContent(window)
+        from PySide6.QtCore import QElapsedTimer
+        from PySide6.QtTest import QTest
+        deadline = QElapsedTimer()
+        deadline.start()
+        while content._building and deadline.elapsed() < 10000:
+            QApplication.processEvents()
+            QTest.qWait(5)
+        self.assertFalse(content._building)
         content._forced_daemons = {Daemon.CoreDuet.name: "test safety rule"}
         with patch("src.gui.ios.daemons.QMessageBox.information"):
             content.recover_notifications_button.click()
         payload = tweak.apply_tweak({})[tweak.file_location]
         for daemon in NOTIFICATION_RECOVERY_DAEMONS:
             for key in daemon.value:
-                self.assertIs(payload[key], daemon is Daemon.CoreDuet)
-        self.assertFalse(content.recommended_switch.isChecked())
+                if key in tweak.never_enable:
+                    self.assertNotIn(key, payload)
+                else:
+                    self.assertIs(payload[key], daemon is Daemon.CoreDuet)
+        self.assertFalse(content.analytics_switch.isChecked())
         content.close()
 
 

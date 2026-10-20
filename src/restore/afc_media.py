@@ -46,9 +46,11 @@ from pathlib import Path
 
 from src.controllers.archive_safety import safe_member
 import time
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
-from pymobiledevice3.services.afc import MAXIMUM_READ_SIZE, AfcService
+from pymobiledevice3.lockdown import create_using_usbmux
+from pymobiledevice3.services.afc import MAXIMUM_READ_SIZE, AfcService, AfcError
+from pymobiledevice3.exceptions import AfcException, AfcFileNotFoundError
 
 from src.exceptions.device_errors import (
     is_connection_error,
@@ -528,7 +530,8 @@ _AFC_OPEN_MAX_ATTEMPTS = 400
 @asynccontextmanager
 async def open_afc_for_media(lockdown_client, progress_callback=None,
                              prompt_choice=None, unlock_prompt=None,
-                             timeout: float = _AFC_OPEN_TIMEOUT):
+                             timeout: float = _AFC_OPEN_TIMEOUT,
+                             refresh_client: bool = False):
     """Open the AFC service, waiting out a locked device.
 
     Only the *connect* is retried. Once the service is up the caller's body
@@ -551,23 +554,34 @@ async def open_afc_for_media(lockdown_client, progress_callback=None,
         last_error = None
         announced = False
         attempt = 0
+        reconnect = refresh_client
         while True:
             attempt += 1
-            afc = AfcService(lockdown_client)
+            fresh_client = None
+            afc = None
             try:
-                # __aenter__ is connect() and nothing else, and a failed
-                # connect leaves the service object with no open channel
-                # (upstream resets its in-flight state so the next attempt
-                # starts clean). The lockdown session itself stays valid, which
-                # is why no reconnect is needed here.
+                client = lockdown_client
+                if reconnect:
+                    fresh_client = await create_using_usbmux(
+                        serial=lockdown_client.identifier, connection_type="USB",
+                        autopair=False,
+                        usbmux_address=getattr(lockdown_client, "usbmux_address", None))
+                    client = fresh_client
+                afc = AfcService(client)
                 service = await afc.__aenter__()
             except Exception as e:
+                if fresh_client is not None:
+                    try:
+                        await fresh_client.close()
+                    except Exception as cleanup_error:
+                        log_warn(f"AFC media: could not close retry session: {cleanup_error}")
                 locked = is_device_lock_required_error(e)
                 if not (locked or is_connection_error(e)):
                     # a real rejection (bad service name, protocol error) --
                     # retrying would just burn the wait
                     raise
                 last_error = e
+                reconnect = reconnect or is_connection_error(e)
                 if locked and not announced:
                     announced = True
                     log_warn("AFC media restore: the device is locked - waiting "
@@ -586,7 +600,11 @@ async def open_afc_for_media(lockdown_client, progress_callback=None,
             try:
                 yield service
             finally:
-                await afc.__aexit__(None, None, None)
+                try:
+                    await afc.__aexit__(None, None, None)
+                finally:
+                    if fresh_client is not None:
+                        await fresh_client.close()
             return
 
         # wait budget spent: offer Abort/Resume instead of killing the restore
@@ -607,6 +625,110 @@ async def open_afc_for_media(lockdown_client, progress_callback=None,
         if decision != "resume":
             raise err from last_error
         log_info("User chose to resume - restarting the AFC media wait cycle")
+
+
+async def _ensure_media_directory(afc, directory, confirmed, progress_callback):
+    if directory in ("", "/") or directory in confirmed:
+        return
+    await _ensure_media_directory(afc, posixpath.dirname(directory), confirmed, progress_callback)
+    for attempt in range(6):
+        try:
+            try:
+                present = await afc.isdir(directory)
+            except AfcFileNotFoundError:
+                present = False
+            else:
+                if not present:
+                    raise NuggetException(f"AFC media: {directory} exists but is not a directory")
+            if not present:
+                try:
+                    await afc.makedirs(directory)
+                except AfcException as creation_error:
+                    # Photos may create the folder between the stat and MAKE_DIR.
+                    try:
+                        present = await afc.isdir(directory)
+                    except AfcException:
+                        present = False
+                    if not present:
+                        raise creation_error
+                if not await afc.isdir(directory):
+                    raise NuggetException(f"AFC media: could not confirm directory {directory}")
+            confirmed.add(directory)
+            return
+        except AfcException as error:
+            if error.status != AfcError.PERM_DENIED:
+                raise
+            if attempt == 5:
+                raise NuggetException(
+                    f"AFC media: the device denied access to {directory}. "
+                    "Photo restoration is incomplete. Keep the local media backup; "
+                    "unlock the device and check the application log before resuming."
+                ) from error
+            progress_callback("The device denied access to the photo folder. Retrying photo restoration…")
+            await asyncio.sleep(min(2 ** attempt, 5))
+
+
+@asynccontextmanager
+async def _pausable_media_connection(lockdown_client, progress_callback, prompt_choice, unlock_prompt):
+    from src.restore.pause_control import current_pause_control
+    control = current_pause_control.get()
+    async with AsyncExitStack() as stack:
+        async def connect(refresh=False):
+            return await stack.enter_async_context(open_afc_for_media(
+                lockdown_client, progress_callback=progress_callback,
+                prompt_choice=prompt_choice, unlock_prompt=unlock_prompt,
+                refresh_client=refresh))
+        service = await connect()
+        if control:
+            control.state = "available"
+        async def checkpoint(refresh=False):
+            nonlocal service
+            if refresh:
+                await stack.aclose()
+                service = await connect(refresh=True)
+            if control and control.requested.is_set():
+                await stack.aclose()
+                progress_callback("Photo and video restoration paused. Keep your device connected. Select Resume to continue.")
+                await control.wait_for_resume()
+                service = await connect()
+                control.state = "available"
+                progress_callback("Resuming photo and video restoration…")
+            return service
+        try:
+            yield checkpoint
+        finally:
+            if control:
+                control.finish_media()
+
+
+async def _wait_for_media_directory(checkpoint, directory, confirmed,
+                                    progress_callback, prompt_choice):
+    deadline = time.monotonic() + _AFC_OPEN_TIMEOUT
+    while True:
+        afc = await checkpoint()
+        try:
+            await _ensure_media_directory(afc, directory, confirmed, progress_callback)
+            return afc
+        except (AfcException, NuggetException) as error:
+            cause = error.__cause__ if isinstance(error, NuggetException) else error
+            if not isinstance(cause, AfcException) or cause.status != AfcError.PERM_DENIED:
+                raise
+            log_warn(f"AFC media: access denied to {directory}; waiting on a fresh session")
+            progress_callback(OperationStatus(
+                "iOS is denying access to the photo folder. Unlock your device and keep it connected. Waiting to retry…",
+                "authentication"))
+            if time.monotonic() >= deadline:
+                message = (
+                    f"iOS is still denying access to {directory}. Photo restoration is incomplete. "
+                    "The local media backup has been kept. Unlock your device before resuming. "
+                    "If this continues while unlocked, a service or permission problem may need to be resolved. "
+                    "Resume retries photo-folder access; it does not repeat the device wipe.")
+                if prompt_choice is None or prompt_choice(
+                        "Photo folder access denied", message) != "resume":
+                    raise NuggetException(message) from error
+                deadline = time.monotonic() + _AFC_OPEN_TIMEOUT
+            await asyncio.sleep(_AFC_OPEN_MAX_DELAY)
+            await checkpoint(refresh=True)
 
 
 async def restore_media_via_afc(lockdown_client, media_root: str,
@@ -641,25 +763,19 @@ async def restore_media_via_afc(lockdown_client, media_root: str,
     if not entries:
         raise NuggetException(f"AFC media store has no photo/video payloads ({root})")
 
-    async with open_afc_for_media(lockdown_client, progress_callback=_log,
-                                  prompt_choice=prompt_choice,
-                                  unlock_prompt=unlock_prompt) as afc:
+    async with _pausable_media_connection(lockdown_client, _log, prompt_choice, unlock_prompt) as checkpoint:
         done_files = 0
         done_bytes = 0
         failed: list[str] = []
         made_dirs: set = set()
         for src, rel in entries:
+            afc = await checkpoint()
             remote = f"/{rel}"
             rdir = posixpath.dirname(remote)
             n = 0
             try:
-                # only MAKE_DIR once per directory: a redundant MAKE_DIR can come
-                # back non-SUCCESS on an existing directory and would abort the
-                # restore on the second file of every folder
-                if rdir and rdir != "/" and rdir not in made_dirs:
-                    made_dirs.add(rdir)
-                    if not await afc.exists(rdir):
-                        await afc.makedirs(rdir)
+                afc = await _wait_for_media_directory(
+                    checkpoint, rdir, made_dirs, _log, prompt_choice)
                 n = await _push_one(afc, src, remote)
             except Exception as e:
                 msg = f"AFC media: failed to restore {remote}: {e}"

@@ -82,7 +82,8 @@ def capture_preview(manager):
     from src.devicemanagement.device_manager import MAX_TENDIES_PER_RESTORE
     from src.tweaks.registry import SPECS_BY_ID
     from src.tweaks.tweak_loader import load_plist_tweaks, load_daemons
-    from src.tweaks.tweak_classes import AdvancedPlistTweak
+    from src.tweaks.tweak_classes import AdvancedPlistTweak, ExperimentalBooleanPlistTweak
+    from src.devicemanagement.device_capabilities import has_camera_control, has_dynamic_island, has_action_button, has_home_button, has_always_on_display
     from src.tweaks.tweak_names import TweakID
     from src.tweaks.tweaks import tweaks
 
@@ -92,6 +93,7 @@ def capture_preview(manager):
     hotload = HotLoad(manager.pref_manager.settings)
     context = dict(device_version=version, device_model=manager.get_current_device_model())
     hidden = hotload.hidden_tweak_names(**context)
+    daemons_enabled = tweaks[TweakID.Daemons].enabled
     forced = hotload.disabled_daemon_keys(**context)
     entries, queued, blocked, forced_names = {}, [], [], []
 
@@ -101,6 +103,8 @@ def capture_preview(manager):
             entries[key]["display"] = display
 
     for tid, tweak in tweaks.items():
+        if tid in (TweakID.Daemons, TweakID.ClearScreenTimeAgentPlist) and not (daemons_enabled or forced):
+            continue
         spec = SPECS_BY_ID.get(tid)
         title = spec.title if spec else tid.name
         section = spec.section.value if spec else tid.name
@@ -111,6 +115,17 @@ def capture_preview(manager):
             if selected:
                 blocked.append(title)
             continue
+        if spec is not None and spec.experimental:
+            model = context["device_model"] or ""
+            if (spec.unavailable_reason
+                    or (spec.ipad_only and not model.startswith("iPad"))
+                    or (spec.iphone_only and not model.startswith("iPhone"))
+                    or (spec.requires_action_button and not has_action_button(model))
+                    or (spec.requires_home_button and not has_home_button(model))
+                    or (spec.requires_always_on and not has_always_on_display(model))
+                    or (spec.requires_camera_control and not has_camera_control(model))
+                    or (spec.requires_dynamic_island and not has_dynamic_island(model))):
+                continue
         if tid == TweakID.PosterBoard:
             for item in tweak.tendies[:MAX_TENDIES_PER_RESTORE]:
                 queued.append(("PosterBoard", item.name))
@@ -131,8 +146,8 @@ def capture_preview(manager):
                         f"{name} — {community.label}", state, shown)
         elif tid == TweakID.IconThemes:
             queued.extend((QCoreApplication.translate("ApplyPreview", "Icon Themes"), item.display_name) for item in tweak.themes)
-        elif tid == TweakID.Daemons and tweak.enabled:
-            values = tweak._filter_keys(tweak.value)
+        elif tid == TweakID.Daemons and (tweak.enabled or forced):
+            values = tweak._filter_keys(tweak.value) if tweak.enabled else {}
             # Mirror the apply-time whitelist extension, without mutating it.
             values.update({key: True for key in forced if key not in tweak.never_enable})
             for key, value in sorted(values.items()):
@@ -156,9 +171,14 @@ def capture_preview(manager):
                 add("StatusBar", "Status Bar", "Status Bar",
                     hashlib.sha256(tweak.setter.get_data()).hexdigest(),
                     QCoreApplication.translate("ApplyPreview", "{0} overrides").format(tweak.count_overrides()))
+        elif isinstance(tweak, ExperimentalBooleanPlistTweak):
+            payload = tweak.apply_tweak({}).get(tweak.file_location, {})
+            if tweak.key in payload:
+                add(tid.name, section, title, payload[tweak.key])
         elif tweak.enabled:
             value = tweak._filter_keys(tweak.value) if isinstance(tweak, AdvancedPlistTweak) else tweak.value
-            add(tid.name, section, title, value)
+            display = QCoreApplication.translate("ApplyPreview", "Remove override") if spec is not None and spec.reset_value is not None and value == spec.reset_value else None
+            add(tid.name, section, title, value, display)
     # Freeze mutable dict/list values before the apply pass can change them.
     return json.loads(json.dumps(dict(entries=entries, queued=queued, blocked=blocked,
                                      forced=forced_names)))
