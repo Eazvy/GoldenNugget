@@ -68,6 +68,7 @@ class TweakSpec:
     requires: tuple[TweakID, ...] = ()
     exclusive_with: Optional[TweakID] = None
     disabled: bool = False  # True = tweak is cut off: never loaded, never applied, never rendered
+    supported_models: tuple[str, ...] = ()
 
 
 def _t(id_: TweakID, section: Section, title: str, location: FileLocation,
@@ -148,7 +149,26 @@ def _icon_outline_experiment():
     return ExperimentalBooleanPlistTweak(GP, "SBDisableIconOutline", True, False)
 
 
+def _siri_ai(action):
+    from .siri_ai import SiriAITweak
+    return SiriAITweak(action)
+
+
 SPECS: tuple[TweakSpec, ...] = (
+    _t(TweakID.SiriAI, Section.INTERNAL, 'Siri AI (Ineligible Regions)',
+       FileLocation.siriAIOverrides, 'SiriAI',
+       'Experimental eligibility override by Project Linwood (mattisklein). Verified on iPhone 16 Pro, iOS 27.0 build 24A437 only.',
+       min_version='27.0', max_version='27.0', iphone_only=True,
+       supported_models=('iPhone17,1',), experimental=True,
+       factory=lambda: _siri_ai('enable'), exclusive_with=TweakID.ResetSiriAIOverrides,
+       warning='Requires an unencrypted protective backup and a reboot. Set Siri language to English (US), then complete consent in Settings. This replaces ALL existing eligibility overrides. Other builds are untested. Turning this switch off does not undo an applied override; use Reset Siri AI Overrides and apply.'),
+    _t(TweakID.ResetSiriAIOverrides, Section.INTERNAL, 'Reset Siri AI Overrides',
+       FileLocation.siriAIOverrides, 'ResetSiriAIOverrides',
+       'Writes a valid empty eligibility override archive. This clears ALL eligibility overrides, including overrides installed by other tools.',
+       min_version='27.0', max_version='27.0', iphone_only=True,
+       supported_models=('iPhone17,1',), experimental=True,
+       factory=lambda: _siri_ai('reset'), exclusive_with=TweakID.SiriAI,
+       warning='This clears ALL eligibility overrides, not just Siri AI. It cannot recover a previous override map. Requires an unencrypted protective backup; apply and reboot.'),
     _sb_experiment(TweakID.SBChamoisWindowingEnabled, 'iPad Window Mode', True, False,
                    "Enables Apple's hidden iPad window-management mode.", ipad_only=True),
     _sb_experiment(TweakID.SBChamoisHideDockExternal, 'Hide Dock on External Display', True, False,

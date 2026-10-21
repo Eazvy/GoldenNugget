@@ -24,6 +24,7 @@ class FileLocation(Enum):
     accessibility = "/var/Managed Preferences/mobile/com.apple.Accessibility.plist"
     
     # Internal Options
+    siriAIOverrides = "/var/containers/Data/SystemGroup/com.apple.eligibilityd/Library/Caches/NeverRestore/eligibility_overrides.data"
     globalPreferences = "/var/Managed Preferences/mobile/.GlobalPreferences.plist"
     globalPreferencesHomeDomain = "/var/mobile/Library/Preferences/.GlobalPreferences.plist"
     appStore = "/var/Managed Preferences/mobile/com.apple.AppStore.plist"

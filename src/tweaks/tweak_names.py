@@ -330,3 +330,7 @@ class TweakID(Enum):
     OTARecoveryBrainURL = auto()
     OTASoftwareUpdateURL = auto()
     OTAAssetAudience = auto()
+
+    # Custom eligibility archive operations (keep existing numeric IDs stable).
+    SiriAI = auto()
+    ResetSiriAIOverrides = auto()

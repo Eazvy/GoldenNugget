@@ -1089,6 +1089,8 @@ async def restore_files(files: list[FileToRestore], reboot: bool = False, lockdo
             log_warn("Prepared backup is encrypted — injecting tweaks is "
                      "impossible (MBErrorDomain/205); falling back to sparse "
                      "restore delivery")
+    from src.tweaks.siri_ai import require_protective_delivery
+    require_protective_delivery(sorted_files, inject_all)
     inject_files = []
     for file in sorted_files:
         if file.domain == "" or file.domain == "z":

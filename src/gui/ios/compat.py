@@ -52,6 +52,8 @@ def compatibility_reasons(tweak_id, device_version: str, model: str = "",
         reasons.append(tr("this control is no longer supported"))
     if spec.unavailable_reason:
         reasons.append(tr(spec.unavailable_reason))
+    if spec.supported_models and model not in spec.supported_models:
+        reasons.append(tr("is only verified on these models: {0}").format(', '.join(spec.supported_models)))
     parsed_device = None
     if device_version:
         try:

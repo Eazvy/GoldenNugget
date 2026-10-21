@@ -1196,6 +1196,7 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
         hotload_skipped = []
         unavailable_controls = self._disable_unavailable_controls(update_label)
         from src.tweaks.registry import SPECS_BY_ID
+        from src.tweaks.siri_ai import SiriAITweak
         # stale/blocked tweaks are skipped; whole hidden features are never applied
         hotload_hidden_names = hotload.hidden_tweak_names(
             device_version=hotload_version, device_model=hotload_model)
@@ -1232,6 +1233,15 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                                             device_version=hotload_version,
                                             device_model=hotload_model) is not None):
                     hotload_skipped.append(tweak_name)
+                    continue
+                if isinstance(tweak, SiriAITweak):
+                    if tweak.enabled:
+                        peer = (TweakID.ResetSiriAIOverrides if tweak_name == TweakID.SiriAI
+                                else TweakID.SiriAI)
+                        if tweaks[peer].enabled:
+                            raise NuggetException("Choose either Siri AI or Reset Siri AI Overrides, not both.")
+                        tweak.apply_tweak(files_to_restore, hotload_version, hotload_model)
+                        uses_domains = True
                     continue
                 if isinstance(tweak, ReversibleBooleanPlistTweak):
                     basic_plists = tweak.apply_tweak(basic_plists)
