@@ -70,11 +70,10 @@ class PreviewState(unittest.TestCase):
         self.assertEqual((state.time, state.battery, state.battery_detail, state.wifi_bars),
                          ('12:00', 100, '', MAX_WIFI_BARS))
 
-    def test_ios27_name_only_pins_no_bars(self):
-        # The iOS 27 archive replaces the whole cellular entry, so an unset
-        # bar count is written as 0 -- the preview must show that, not 4.
+    def test_ios27_name_only_keeps_stock_preview_bars(self):
+        # An unset bar count is omitted; retain the stock preview placeholder.
         state = preview_state(FakeStatusBar(carrier='GoldenNugget'), ios27=True, now=NOON)
-        self.assertEqual((state.carrier, state.bars), ('GoldenNugget', 0))
+        self.assertEqual((state.carrier, state.bars), ('GoldenNugget', MAX_BARS))
         self.assertIsNone(state.secondary_bars)
 
     def test_values_are_clamped_and_hidden_icons_drop_out(self):

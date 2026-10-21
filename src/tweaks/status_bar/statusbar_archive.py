@@ -16,24 +16,15 @@ The file lives in **HomeDomain**, the same domain the iOS 26 classic path
 writes, so it is delivered by the normal backup restore -- no exploit and no
 out-of-band channel is involved.
 
-Scope: the carrier **name**, its **service badge** and its **signal-bar
-count** are user-settable -- these are the only fields of the record that
-the upstream iOS 27 reverse-engineering project (the basis of this writer)
-exposes as a supported surface. Everything else in the cellular entry is
-written with the fixed values that were verified to deserialize and render;
-exposing more of the record without hardware verification would risk
-shipping a status bar that fails to draw at all.
+Scope: the carrier name, service badge, signal-bar count and fixed network
+badge are user-settable. Network type is a visual override only; it cannot
+change the radio connection or track live LTE/5G transitions.
 
-Merging is all-or-nothing per entry: SpringBoard reconciles the disk record
-with the live one by *replacing the whole* ``cellularEntry`` object (UIKitCore
-``-[_UIStatusBarData dataByApplyingOverlay:]``; the upstream RE project proved
-there is no field-level pass-through). Whatever this writer puts in the entry
-is therefore pinned into the status bar, and whatever it leaves at 0 stays
-at the archiver's zero value. That is why an unset network type or bar count
-is written as 0 ("none") instead of a plausible-looking constant: a
-carrier-name-only override must not fabricate a "5G" label or a permanently
-full signal. Live signal strength cannot be expressed in this format at all;
-this archive cannot preserve live cellular indicators.
+Signal bars are optional: omit ``displayValue`` unless the user explicitly
+selects a count, including an explicit zero. Network type defaults to
+0 (no generation badge) unless explicitly selected; there is no supported dynamic network-type sentinel.
+The archive targets cellular entries only: it must never include ``vpnEntry``
+or suppress background activity identifiers.
 
 There is deliberately **no** support for the classic time/date/battery/wifi
 overrides or for the 46 per-item show/hide toggles: no counterpart for them
@@ -75,26 +66,14 @@ _CELLULAR_CLASS_CHAIN = [
     "NSObject",
 ]
 
-# Fixed cellular-entry values. `status` 5 is "connected" and `enabled` true
-# is what makes the entry render at all; the carrier name itself is supplied
-# through `string`/`crossfadeString`. `badgeString` stays null unless a badge
-# is set, and `displayValue` is only a default -- `build_archive` overrides it
-# with the user's bar count.
-#
-# `type` and `displayValue` MUST stay 0 unless the user set them explicitly:
-# SpringBoard merges this record by *atomically replacing* the whole live
-# cellular entry (UIKitCore `-[_UIStatusBarData dataByApplyingOverlay:]` --
-# no field-level pass-through exists), so any value written here is pinned
-# into the status bar. 10 == 5G and 4 == four bars, which is how a
-# carrier-name-only override used to fabricate a "5G" indicator and a
-# permanently full signal. 0 is the enum's "none" and the archiver's own
-# zero value for a missing key, i.e. the neutral state: no network label,
-# no fabricated bars.
+# Cellular-entry rendering defaults. Signal-bar displayValue is deliberately
+# absent; add it only for an explicit user override. Network type 0 suppresses
+# the generation label rather than requesting live network-type passthrough.
+# An explicit network-type selection replaces that default.
 _ENTRY_DEFAULTS = {
     "badgeString": None,
     "callForwardingEnabled": False,
     "displayRawValue": 0,
-    "displayValue": 0,
     "enabled": True,
     "isBootstrapCellular": False,
     "lowDataModeActive": False,
@@ -129,18 +108,13 @@ def _truncate_badge(text):
 
 
 def _bars(value):
-    """Clamp a signal-bar count into the drawable range.
-
-    ``None`` (and junk) falls back to the entry default -- the neutral 0,
-    because the entry is pinned wholesale and must not claim bars the user
-    never asked for.
-    """
+    """Clamp an explicit bar count; absent or invalid input stays omitted."""
     if value is None:
-        return _ENTRY_DEFAULTS["displayValue"]
+        return None
     try:
         value = int(value)
     except (TypeError, ValueError):
-        return _ENTRY_DEFAULTS["displayValue"]
+        return None
     return max(0, min(MAX_BARS, value))
 
 
@@ -151,6 +125,8 @@ def build_archive(
     secondary_badge=None,
     primary_bars=None,
     secondary_bars=None,
+    primary_network_type=None,
+    secondary_network_type=None,
 ) -> bytes:
     """Build the ``StatusBarOverrides.archive`` payload.
 
@@ -160,8 +136,7 @@ def build_archive(
 
     ``primary_badge``/``secondary_badge`` become the entry ``badgeString`` and
     ``primary_bars``/``secondary_bars`` its ``displayValue``; ``None`` keeps
-    the neutral default (no badge, no bars -- the entry is pinned wholesale,
-    so an unset field must not claim a value the user never asked for).
+    badge unset and omits the signal-bar key.
     """
     primary = _truncate(primary_carrier)
     secondary = _truncate(secondary_carrier)
@@ -186,7 +161,7 @@ def build_archive(
     data_uid = add(data_obj)
     root_obj["statusBarData"] = data_uid
 
-    def add_cellular(carrier, badge=None, bars=None):
+    def add_cellular(carrier, badge=None, bars=None, network_type=None):
         # `string` and `crossfadeString` reference one shared string object,
         # the same way the stock archiver deduplicates them.
         text = add(carrier)
@@ -198,19 +173,23 @@ def build_archive(
         # The badge is its own string object, referenced only by badgeString.
         if badge:
             entry["badgeString"] = add(badge)
-        entry["displayValue"] = _bars(bars)
+        if network_type is not None:
+            entry["type"] = max(0, min(30, int(network_type)))
+        count = _bars(bars)
+        if count is not None:
+            entry["displayValue"] = count
         return add(entry)
 
     entries = []
     if primary:
         entry_uid = add_cellular(
-            primary, _truncate_badge(primary_badge), primary_bars
+            primary, _truncate_badge(primary_badge), primary_bars, primary_network_type
         )
         data_obj["cellularEntry"] = entry_uid
         entries.append(entry_uid)
     if secondary:
         entry_uid = add_cellular(
-            secondary, _truncate_badge(secondary_badge), secondary_bars
+            secondary, _truncate_badge(secondary_badge), secondary_bars, secondary_network_type
         )
         data_obj["secondaryCellularEntry"] = entry_uid
         entries.append(entry_uid)

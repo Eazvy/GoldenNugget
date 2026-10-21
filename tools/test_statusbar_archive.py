@@ -81,6 +81,7 @@ def test_is_a_keyed_archive():
         classname(objects, root["$class"]) == "_SBSystemStatusStatusBarOverridesArchiveRecord",
     )
     data = objects[root["statusBarData"].data]
+    check("only cellular entries are targeted", set(data) <= {"$class", "cellularEntry", "secondaryCellularEntry"})
     check("statusBarData class", classname(objects, data["$class"]) == "STStatusBarData")
     suppressed = objects[root["suppressedBackgroundActivityIdentifiers"].data]
     check("suppressed set class", classname(objects, suppressed["$class"]) == "NSSet")
@@ -95,6 +96,7 @@ def test_cellular_entry_shape():
 
     for label, item in (("primary", entry), ("secondary", secondary)):
         check(f"{label} class", classname(objects, item["$class"]) == "STStatusBarDataCellularEntry")
+        check(f"{label} omits unset bars", "displayValue" not in item)
         check(f"{label} enabled", item["enabled"] is True)
         check(f"{label} status is connected", item["status"] == 5)
         check(f"{label} string and crossfadeString share an object",
@@ -106,7 +108,6 @@ def test_cellular_entry_shape():
         # type 10 pinned a "5G" indicator and displayValue 4 pinned full
         # signal onto every carrier-name change).
         check(f"{label} no network type pinned", item["type"] == 0, item["type"])
-        check(f"{label} no bars pinned", item["displayValue"] == 0, item["displayValue"])
 
     check("both entries share one class definition",
           entry["$class"].data == secondary["$class"].data)
@@ -239,15 +240,10 @@ def test_badge_and_bars_round_trip():
     check("secondary name/badge/bars", got["secondary"] == ("Telkomsel", "S", 1),
           got["secondary"])
 
-<<<<<<< HEAD
-    # Defaults: name set, no badge, no bars.
-=======
-    # Defaults: name set, no badge, no bars. SpringBoard replaces the whole
-    # live entry, so a name-only override must not pin a full signal.
->>>>>>> 7109fcf372e464a8a9daa572b57a343cfa1c030a
+    # Defaults omit signal bars instead of serializing an unwanted zero.
     got = carrier_overrides(build_archive("Mango"))
     check("default badge is unset", got["primary"][1] is None, got["primary"])
-    check("default bars are 0", got["primary"][2] == 0, got["primary"])
+    check("default bars are omitted", got["primary"][2] is None, got["primary"])
 
     # The badge is a separate string object referenced only by badgeString.
     data, objects = status_bar_data(build_archive("Mango", None, "P"))
@@ -279,11 +275,12 @@ def test_badge_and_bars_are_sanitised():
     check("bars clamp low", carrier_overrides(
         build_archive("Mango", None, None, None, -5))["primary"][2] == 0)
 
-    # Junk falls back to the neutral default instead of raising or inventing
-    # a bar count.
+    # Invalid inputs are omitted as well.
+    check("explicit zero bars are retained", carrier_overrides(
+        build_archive("Mango", primary_bars=0))["primary"][2] == 0)
     for junk in ("x", None, object()):
         got = carrier_overrides(build_archive("Mango", None, None, None, junk))
-        check("junk bars fall back to 0", got["primary"][2] == 0, repr(junk))
+        check("junk bars are omitted", got["primary"][2] is None, repr(junk))
 
 
 def test_tweak_passes_badge_and_bars_to_the_archive():
@@ -325,6 +322,30 @@ def test_tweak_passes_badge_and_bars_to_the_archive():
           is_reset_archive(staged[0].contents))
 
 
+def test_network_types():
+    from src.tweaks.status_bar.status_bar_tweak import StatusBarTweak
+
+    tweak = StatusBarTweak()
+    tweak.enabled = True
+    tweak.set_carrier_override("Primary")
+    tweak.set_secondary_carrier_override("Secondary")
+    for primary, secondary in ((4, 8), (10, 11), (12, 13), (0, 9)):
+        tweak.set_data_network_type(primary)
+        tweak.set_secondary_data_network_type(secondary)
+        staged = []
+        tweak.apply_ios27_tweak(staged)
+        entries = cell_entries(staged[0].contents)
+        check("network types forwarded independently", [e["type"] for e in entries] == [primary, secondary])
+        check("network type leaves live bars unset", all("displayValue" not in e for e in entries))
+    tweak.unset_data_network_type()
+    tweak.unset_secondary_data_network_type()
+    staged = []
+    tweak.apply_ios27_tweak(staged)
+    check("unset network types return to hidden badge", all(e["type"] == 0 for e in cell_entries(staged[0].contents)))
+    check("network type alone does not invent a carrier", is_reset_archive(build_archive(primary_network_type=10)))
+
+
+test_network_types()
 # =============================================================================
 test_is_a_keyed_archive()
 test_cellular_entry_shape()

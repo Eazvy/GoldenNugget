@@ -26,7 +26,7 @@ class StatusBarTweak(Tweak):
         """Stage StatusBarOverrides.archive (iOS 27+).
 
         The cellular entry carries the carrier name, its service badge and
-        its signal-bar count, so those four overrides survive. The classic
+        its signal-bar count and fixed network type. The classic
         time/date/battery/wifi overrides and the per-item show/hide toggles
         have no counterpart in the archive and are dropped, so the page hides
         them (see src/gui/ios/statusbar.py).
@@ -47,6 +47,10 @@ class StatusBarTweak(Tweak):
                 secondary_badge,
                 bars,
                 secondary_bars,
+                primary_network_type=(self.get_data_network_type_override()
+                    if self.is_data_network_type_overridden() else None),
+                secondary_network_type=(self.get_secondary_data_network_type_override()
+                    if self.is_secondary_data_network_type_overridden() else None),
             ),
             restore_path=ARCHIVE_PATH,
             domain=ARCHIVE_DOMAIN
