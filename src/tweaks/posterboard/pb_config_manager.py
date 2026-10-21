@@ -15,7 +15,7 @@ from .pb_config_item import PBConfigItem
 # pulled database on them too; the private aliases below keep the old local names
 # working, and DB_FILE_NAME stays re-exported from here.
 from .db_validate import (
-    DB_FILE_NAME, is_encrypted_database, list_tables,
+    DB_FILE_NAME, POSTERBOARD_TABLES, is_encrypted_database, list_tables,
     posterboard_db_is_snapshot_ok, snapshot_problem)
 
 _list_tables = list_tables
@@ -50,14 +50,14 @@ def create_empty_posterboard_db(dest_path: str) -> str:
             "  roleId TEXT,"
             "  roleSortKey INTEGER"
             ")")
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS sqlite_sequence ("
-            "  name TEXT,"
-            "  seq INTEGER"
-            ")")
+        # AUTOINCREMENT on poster creates SQLite's reserved sqlite_sequence table.
         conn.commit()
     finally:
         conn.close()
+    if not _validate_posterboard_db(dest_path):
+        raise NuggetException(
+            "The empty PosterBoard database could not be created correctly. "
+            "The reset was stopped before wiping the device.")
     return dest_path
 
 class PBConfigManager:
