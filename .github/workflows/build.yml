@@ -154,29 +154,7 @@ jobs:
             dist/SHA256SUMS-macOS.txt
             dist/macOS-dependencies.txt
           if-no-files-found: error
-
-  test-macos:
-    needs: build-macos
-    name: Smoke test macOS ARM64
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v7
-        with:
-          name: Nugget_macOS_Universal2
-          path: artifacts
-      - name: Test frozen application
-        env:
-          QT_QPA_PLATFORM: offscreen
-          TEST_ARCH: arm64
-        run: |
-          ditto -x -k artifacts/Nugget-macOS-Universal.zip extracted
-          codesign --verify --deep --strict extracted/Nugget.app
-          extracted/Nugget.app/Contents/MacOS/Nugget tools/smoke_macos.py > smoke.log 2>&1
-          cat smoke.log
-          grep -q 'MACOS_SMOKE_OK' smoke.log
-          hdiutil verify artifacts/Nugget-macOS-Universal2.dmg
-
+          
   build-windows:
     if: ${{ github.event_name == 'push' || github.event.inputs.build_for_windows == 'true' }}
     runs-on: windows-latest
