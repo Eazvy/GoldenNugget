@@ -1,10 +1,27 @@
 """Shared bottom navigation with scroll-direction reveal."""
+import random
+
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QPoint, QPointF, QSizeF, QEvent, QRect, QRectF, QVariantAnimation
 from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QPushButton, QAbstractScrollArea, QLayout, QGraphicsOpacityEffect
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRegion, QLinearGradient, QFont, QPixmap
 from shiboken6 import isValid
 from src.gui.theme import ColorThemeManager, theme_icon
+
+
+# Pick once per process so rebuilding navigation keeps the launch's slogan.
+_LAUNCH_SLOGAN = random.choice((
+    "get bootlooped!",
+    "awesome!",
+    "shidahh nugget",
+    "iOS 27 is shit",
+    "Liquid Gl(ass)",
+    "so cool",
+    "Ashley look at me",
+    "golden slop",
+    "UI revamp by @oma!",
+    "icon artwork by mekabrine",
+))
 
 
 class NavigationGlass(QFrame):
@@ -138,7 +155,7 @@ class NavigationBrand(QPushButton):
         self.setFlat(True)
         self.setCursor(Qt.PointingHandCursor)
         self._title = self.tr("GoldenNugget")
-        self._slogan = self.tr("Powering NugiOS")
+        self._slogan = _LAUNCH_SLOGAN
         self.setAccessibleName(self._title)
         self.setAccessibleDescription(self._slogan)
         self.setToolTip(self._slogan)
