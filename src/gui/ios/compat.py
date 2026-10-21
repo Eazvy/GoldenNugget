@@ -30,8 +30,17 @@ def _parse_version(value: str) -> Version:
     return Version(match.group(0))
 
 
+def untested_tweaks_enabled(device_version: str) -> bool:
+    from src.controllers.settings import Settings
+    try:
+        is_ios26 = Version("26") <= _parse_version(device_version) < Version("27")
+    except ValueError:
+        return False
+    return is_ios26 and Settings().value("enable_incompatible_tweaks", False, type=bool)
+
+
 def compatibility_reasons(tweak_id, device_version: str, model: str = "",
-                          is_iphone: bool | None = None) -> list[str]:
+                          is_iphone: bool | None = None, *, allow_untested=False) -> list[str]:
     """Return precise reasons a tweak cannot run on the selected device."""
     spec = SPECS_BY_ID.get(tweak_id)
     if spec is None:
@@ -50,11 +59,12 @@ def compatibility_reasons(tweak_id, device_version: str, model: str = "",
         except ValueError:
             reasons.append(tr("the iOS version could not be verified"))
 
-    if parsed_device is not None and spec.min_version:
+    ignore_version = allow_untested and untested_tweaks_enabled(device_version)
+    if parsed_device is not None and spec.min_version and not ignore_version:
         minimum = _parse_version(spec.min_version)
         if parsed_device < minimum:
             reasons.append(tr("requires iOS {0} or newer").format(spec.min_version))
-    if parsed_device is not None and spec.max_version:
+    if parsed_device is not None and spec.max_version and not ignore_version:
         maximum = _parse_version(spec.max_version)
         if parsed_device > maximum:
             reasons.append(tr("supports iOS {0} or older").format(spec.max_version))
@@ -91,4 +101,5 @@ def is_tweak_compatible(tweak_id, device_version: str, is_iphone: bool,
     # so an uncertain tweak is never offered as definitely compatible.
     if not device_version and not model:
         return True
-    return not compatibility_reasons(tweak_id, device_version, model, is_iphone)
+    return not compatibility_reasons(tweak_id, device_version, model, is_iphone,
+                                    allow_untested=True)

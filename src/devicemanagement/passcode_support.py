@@ -1,4 +1,4 @@
-"""Local Passcode Theme gate; 27.2 builds are explicit to distinguish betas."""
+"""Passcode Themes on iOS 26 and 27; 27.2 builds distinguish betas."""
 import re
 
 from PySide6.QtCore import QCoreApplication
@@ -16,13 +16,13 @@ def passcode_theme_unavailable_reason(version, build, model):
     if match is None:
         return tr("Your iOS version could not be verified.")
     parsed = tuple(int(part or 0) for part in match.groups())
-    if (27, 0, 0) <= parsed < (27, 2, 0):
+    if (26, 0, 0) <= parsed < (27, 2, 0):
         return None
     if parsed == (27, 2, 0) and str(build).strip() in _IOS_27_2_SUPPORTED_BUILDS:
         return None
     if parsed == (27, 2, 0) and not build:
         return tr("Your iOS 27.2 beta build could not be verified.")
-    return tr("Your version is not supported. Requires iOS 27.0 through 27.2 beta 3 (24B5099f).")
+    return tr("Your version is not supported. Requires iOS 26.0 through 27.2 beta 3 (24B5099f).")
 
 
 def current_passcode_theme_reason(manager):

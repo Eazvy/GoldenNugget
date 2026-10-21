@@ -110,6 +110,7 @@ class IOSSectionContent(QWidget):
         if self._inner is None and not getattr(self, "_building", False):
             self.rebuild()
         super().showEvent(event)
+        QTimer.singleShot(0, self._offer_untested_tweaks)
         if not getattr(self, "_building", False):
             for tweak_id, switch in self._tweak_switches.items():
                 selected = tweaks.get(tweak_id)
@@ -119,6 +120,39 @@ class IOSSectionContent(QWidget):
                     switch.setChecked(checked)
                     switch.blockSignals(False)
             self._apply_search()
+
+    def _offer_untested_tweaks(self):
+        from src.gui.ios.compat import _parse_version
+        from src.devicemanagement.constants import Version
+        from src.gui.dialogs.confirmation import ConfirmationDialog
+        if not self.isVisible():
+            return
+        version = self.window.device_manager.get_current_device_version()
+        try:
+            if not Version("26") <= _parse_version(version) < Version("27"):
+                return
+        except ValueError:
+            return
+        if (self.window.settings.value("enable_incompatible_tweaks", False, type=bool)
+                or self.window.settings.value("incompatible_tweaks_choice_done", False, type=bool)
+                or getattr(self.window, "_untested_tweaks_prompt_shown", False)):
+            return
+        self.window._untested_tweaks_prompt_shown = True
+        dialog = ConfirmationDialog(
+            self.window, self.tr("This is not all tweaks"),
+            self.tr("You can get more but they are untested with your iOS version\n"
+                    "You can always change your mind in settings"),
+            self.tr("Enable incompatible tweaks"))
+        dialog.cancel_btn.setText(self.tr("No"))
+        enabled = dialog.exec() == QDialog.Accepted
+        self.window.settings.setValue("enable_incompatible_tweaks", enabled)
+        self.window.settings.setValue("incompatible_tweaks_choice_done", True)
+        self.window.settings.sync()
+        if enabled:
+            for content in self.window.findChildren(IOSSectionContent):
+                if content._inner is not None:
+                    content.rebuild()
+        dialog.deleteLater()
 
     def rebuild(self):
         from src.gui.ios.incremental_builder import IncrementalBuilder

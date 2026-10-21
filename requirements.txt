@@ -1,4 +1,5 @@
 pymobiledevice3==10.7.1
+certifi
 PySide6-Essentials==6.12.0; sys_platform == 'win32'
 PySide6==6.12.0; sys_platform != 'win32'
 PyInstaller==6.22.1

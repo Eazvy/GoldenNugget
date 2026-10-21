@@ -309,8 +309,8 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         self.ui.refreshBtn.setToolTip(QCoreApplication.translate("Nugget", "Refresh connected devices"))
         self.ui.devicePicker.currentIndexChanged.connect(self.change_selected_device)
         self._device_monitor_thread = DeviceMonitorThread(self)
-        self._device_monitor_thread.devices_changed.connect(self.on_device_connection_changed)
-        self._device_monitor_thread.usb_devices_changed.connect(self.on_usb_devices_changed)
+        self._device_monitor_thread.devices_changed.connect(self._on_device_connection_changed)
+        self._device_monitor_thread.usb_devices_changed.connect(self._on_usb_devices_changed)
         self._device_monitor_thread.start()
         self.refresh_devices()
         # The refresh above runs on a worker thread, so the device list is still

@@ -164,7 +164,7 @@ class DeviceBarMixin:
 
 
     @QtCore.Slot(object)
-    def on_usb_devices_changed(self, udids):
+    def _on_usb_devices_changed(self, udids):
         from src.devicemanagement.constants import normalize_udid
         self._usb_event_generation = getattr(self, "_usb_event_generation", 0) + 1
         self._usb_monitor_ready = True
@@ -196,7 +196,7 @@ class DeviceBarMixin:
             self.ios_home.update_status()
 
     @QtCore.Slot()
-    def on_device_connection_changed(self):
+    def _on_device_connection_changed(self):
         self._device_change_refresh_pending = True
         self._schedule_device_event_refresh()
 

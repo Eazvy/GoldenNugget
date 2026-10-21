@@ -45,12 +45,12 @@ diagnostic options were not duplicated.
 
 ## Passcode Theme range
 
-The requested UI policy is iOS 27.0 through 27.2 beta 3, inclusive. The supplied
+The requested UI policy is iOS 26.0 through 27.2 beta 3, inclusive. The supplied
 beta-3 build is `24B5099f`. The earlier `24B5084k` and `24B5089g` builds are listed
 in the same ipsw-diffs comparison sequence. Only these explicit 27.2 builds
 are allowed; a plain ProductVersion of `27.2` is not proof of beta 3.
 
-- iPhone versions from 27.0 up to, but excluding, 27.2 are allowed.
+- iPhone versions from 26.0 up to, but excluding, 27.2 are allowed.
 - 27.2 is allowed only for those three recognized builds.
 - Earlier/later versions, unknown 27.2 builds, non-iPhones, and missing metadata
   are disabled with an explanation on the Home card.

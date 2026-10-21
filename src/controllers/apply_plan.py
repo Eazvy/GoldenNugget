@@ -33,7 +33,7 @@ def build_apply_plan(manager):
         if tid.name in hidden or safety.rule_for(tid, **context) is not None:
             continue
         if tweak.enabled:
-            reasons = compatibility_reasons(tid, version, model)
+            reasons = compatibility_reasons(tid, version, model, allow_untested=True)
             if reasons:
                 issues.append(dict(code='incompatible_tweak', tweak=tid.name, reasons=reasons))
             spec = SPECS_BY_ID.get(tid)

@@ -614,7 +614,7 @@ class DeviceManager:
         unavailable = set()
         disabled = []
         for tweak_id, spec in SPECS_BY_ID.items():
-            reasons = compatibility_reasons(tweak_id, version, model)
+            reasons = compatibility_reasons(tweak_id, version, model, allow_untested=True)
             if not reasons:
                 continue
             unavailable.add(tweak_id)

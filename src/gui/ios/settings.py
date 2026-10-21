@@ -97,6 +97,12 @@ class IOSSettingsPage(QWidget):
             self._make_hotload_handler(),
         )
 
+        self.incompatible_tweaks_switch = self._make_switch(
+            QCoreApplication.translate("Nugget", "Enable incompatible tweaks"),
+            self.window.settings.value("enable_incompatible_tweaks", False, type=bool),
+            self._on_incompatible_tweaks_toggled,
+        )
+
         # Language
         self.content_layout.addWidget(IOSSectionHeader(QCoreApplication.translate("Nugget", "App Language")))
         self._make_language_row()
@@ -245,6 +251,10 @@ class IOSSettingsPage(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self.incompatible_tweaks_switch.blockSignals(True)
+        self.incompatible_tweaks_switch.setChecked(
+            self.window.settings.value("enable_incompatible_tweaks", False, type=bool))
+        self.incompatible_tweaks_switch.blockSignals(False)
         self._sync_setting_dependencies()
         if self._first_show:
             self._first_show = False
@@ -402,6 +412,15 @@ class IOSSettingsPage(QWidget):
 
     def _on_sidebar_toggled(self, checked):
         self.window.set_sidebar_enabled(checked)
+
+    def _on_incompatible_tweaks_toggled(self, checked):
+        from src.gui.ios.tweaks import IOSSectionContent
+        self.window.settings.setValue("enable_incompatible_tweaks", checked)
+        self.window.settings.setValue("incompatible_tweaks_choice_done", True)
+        self.window.settings.sync()
+        for content in self.window.findChildren(IOSSectionContent):
+            if content._inner is not None:
+                content.rebuild()
 
     def _make_switch(self, title: str, checked: bool, on_toggled) -> IOSSwitch:
         c = self._tm.colors
