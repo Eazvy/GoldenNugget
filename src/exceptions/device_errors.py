@@ -35,6 +35,9 @@ def is_connection_error(exc: Exception) -> bool:
     msg = str(exc).lower()
     return isinstance(exc, (
         pm3_exc.ConnectionTerminatedError,
+        pm3_exc.MuxException,
+        pm3_exc.DeviceNotFoundError,
+        pm3_exc.ConnectionFailedError,
         ConnectionError,
         OSError,
         asyncio.TimeoutError,
@@ -84,3 +87,7 @@ def is_transient_restore_error(error) -> bool:
     if "parse_plist invalid data" in msg:
         return True
     return "start" in msg.lower() and "service" in msg.lower()
+
+
+def is_restore_mode_error(exc: BaseException) -> bool:
+    return isinstance(exc, pm3_exc.IncorrectModeError) and "com.apple.mobile.restored" in str(exc)

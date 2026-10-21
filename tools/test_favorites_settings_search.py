@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, QElapsedTimer
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit
 from src.controllers.favorites import TweakFavorites
 from src.gui.ios.tweaks import IOSSectionContent
@@ -35,11 +36,24 @@ class FavoritesSearchTests(unittest.TestCase):
         settings_patch.start()
         self.addCleanup(settings_patch.stop)
 
+    def wait_for_rows(self, page):
+        if page._inner is None and not getattr(page, "_building", False):
+            page.rebuild()
+        deadline = QElapsedTimer()
+        deadline.start()
+        while getattr(page, '_building', False) and deadline.elapsed() < 10000:
+            self.app.processEvents()
+            QTest.qWait(5)
+        self.assertFalse(getattr(page, '_building', False))
+
     def test_bookmarks_persist_sync_and_respect_compatibility(self):
-        manager = SimpleNamespace(get_current_device_version=lambda: '27.0',
+        manager = SimpleNamespace(data_singleton=SimpleNamespace(current_device=None),
+                                  get_current_device_version=lambda: '27.0',
                                   get_current_device_model=lambda: 'iPhone17,3')
         window = SimpleNamespace(device_manager=manager)
         one, two = IOSSectionContent(window), IOSSectionContent(window)
+        self.wait_for_rows(one)
+        self.wait_for_rows(two)
         tid = next(tid for card, tid, *_ in one._search_rows if not card.isHidden())
         before = {tid: (t.enabled, repr(t.value)) for tid, t in tweaks.items()}
         one._favorite_buttons[tid].click()
@@ -49,6 +63,7 @@ class FavoritesSearchTests(unittest.TestCase):
         one.filter_control.setCurrentIndex(2)
         self.assertEqual([tid for card, tid, *_ in one._search_rows if not card.isHidden()], [tid])
         one.rebuild()
+        self.wait_for_rows(one)
         self.assertTrue(one._favorite_buttons[tid].isChecked())
         one._favorite_buttons[tid].click()
         self.assertFalse(two._favorite_buttons[tid].isChecked())

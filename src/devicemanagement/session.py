@@ -21,7 +21,8 @@ from pymobiledevice3.lockdown import create_using_usbmux
 @asynccontextmanager
 async def lockdown_session(serial: Optional[str] = None, *,
                            autopair: bool = True,
-                           pair_timeout: Optional[float] = 120.0):
+                           pair_timeout: Optional[float] = 120.0,
+                           connection_type: Optional[str] = None):
     """Open a lockdown connection to the device and close it safely on exit.
 
     :param serial: usbmux serial of the device (``None`` = first available).
@@ -29,9 +30,11 @@ async def lockdown_session(serial: Optional[str] = None, *,
         the host is not (or no longer) paired with the device.
     :param pair_timeout: seconds to wait for the user to accept the trust
         dialog; ``None`` waits forever.
+    :param connection_type: optionally restrict discovery to USB or Network.
     """
     ld = await create_using_usbmux(
-        serial=serial, autopair=autopair, pair_timeout=pair_timeout)
+        serial=serial, autopair=autopair, pair_timeout=pair_timeout,
+        connection_type=connection_type)
     try:
         if autopair and not getattr(ld, "paired", False):
             # lockdownd accepted the pair request but the session did not

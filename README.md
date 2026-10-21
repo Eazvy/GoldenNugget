@@ -59,6 +59,13 @@ Need support? Join our [Discord Server][server].
 ## On-device mobile version
 [GoldenNugget Mobile][mobile] runs on your device without a computer.
 
+## Make your own templates
+[Batter Builder](https://github.com/GoldenNugget-Team/GoldenNugget-TemplateBuilder/releases/latest)
+is a visual editor for `.batter` templates with community tweaks: switches,
+sliders, text boxes and choice lists, no JSON by hand. It checks the template
+with GoldenNugget's rules, previews it on a virtual iPhone and submits it to the
+[community catalog](https://github.com/GoldenNugget-Team/GoldenNugget-Presets).
+
 ## Features
 <details>
 <summary>iOS 26.2 - 27.0+</summary>
@@ -69,6 +76,7 @@ Need support? Join our [Discord Server][server].
   - Device-Specific wallpapers in MercuryPoster can be installed
   - See documentation on the structure of tendies and batter files in [documentation.md](documentation.md)
 - Templates: Custom Operations and file editing
+  - Make your own with [Batter Builder](https://github.com/GoldenNugget-Team/GoldenNugget-TemplateBuilder/releases/latest), a visual editor for templates with community tweaks
   - See documentation on the structure of batter files in [documentation.md](documentation.md)
 - Status Bar
   - Live preview of the Lock Screen and Home Screen status bar before applying
@@ -262,6 +270,13 @@ python compile.py
 ```
 
 Build output is written to `dist/`.
+
+The macOS CI build downloads Qt/PySide6 6.12.0 Universal2 wheels for Python
+3.15 from [QTBuildMacOS](https://github.com/GoldenNugget-Team/QTBuildMacOS).
+Qt compilation, wheel normalization, and shared releases are maintained there;
+this repository builds the application using the published wheels. The current
+runtime requires macOS 14.4 or newer. See the shared repository for local Qt
+build instructions and reuse in other GoldenNugget-Team projects.
 
 ## Contributing and forking
 

@@ -10,7 +10,6 @@ class StatusBarTweak(Tweak):
     def __init__(self):
         super().__init__(key=None)
         self.setter = Setter()
-
     def _apply_changes(self, overrides) -> None:
         setter = self.setter
         setter.apply_changes(overrides)

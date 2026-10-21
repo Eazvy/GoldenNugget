@@ -15,13 +15,6 @@ class Daemon(Enum):
     ]
     UsageTrackingAgent = ["com.apple.UsageTrackingAgent"]
     GameCenter = ["com.apple.gamed"]
-    ScreenTime = [
-        "com.apple.ScreenTimeAgent",
-        "com.apple.homed",
-        "com.apple.familycircled",
-        "com.apple.familynotification",
-        "com.apple.asktod"
-    ]
     CrashReports = [
         "com.apple.ReportCrash",
         "com.apple.ReportCrash.Jetsam",
@@ -98,7 +91,6 @@ class Daemon(Enum):
         "com.apple.adservicesd"
     ]
     News = ["com.apple.newsd"]
-    AskPermissions = ["com.apple.askpermissiond"]
     FamilySharing = [
         "com.apple.familycircled",
         "com.apple.familynotificationd"
@@ -110,20 +102,12 @@ class Daemon(Enum):
         "com.apple.nanomediacontrold",
         "com.apple.nanopreferencesd"
     ]
-    SiriServices = [
-        "com.apple.siriactionsd",
-        "com.apple.siriinferenced",
-        "com.apple.assistant.intentdaemon"
-    ]
     Feedback = ["com.apple.feedbackd"]
-    Commerce = ["com.apple.commerce"]
-    Automount = ["com.apple.automountd"]
     WifiLogging = ["com.apple.wifilogd"]
     Maps = ["com.apple.geod"]
     SafariSuggestions = ["com.apple.parsecd"]
     Shazam = ["com.apple.shazamd"]
     SettingsStats = ["com.apple.settings-statsd"]
-    StatusKit = ["com.apple.statuskit"]
     Reminders = ["com.apple.reminderd"]
     AirPlay = ["com.apple.airplay"]
     GameKitService = ["com.apple.gamekitservice"]
@@ -200,7 +184,7 @@ INTERFACE_DAEMONS: frozenset["Daemon"] = frozenset({
     Daemon.PassBook, Daemon.Spotlight, Daemon.NanoTimeKit,
     Daemon.VoiceControl, Daemon.FollowUp, Daemon.Location,
     Daemon.News, Daemon.FamilySharing, Daemon.VideoSubscriptions,
-    Daemon.WebBookmarks, Daemon.AppleWatchNano, Daemon.SiriServices,
+    Daemon.WebBookmarks, Daemon.AppleWatchNano,
     Daemon.WifiLogging, Daemon.Maps, Daemon.SafariSuggestions,
     Daemon.Reminders, Daemon.AirPlay, Daemon.GameKitService,
     Daemon.Sidecar, Daemon.SpeechRecognition, Daemon.Translate,

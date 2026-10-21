@@ -1,12 +1,12 @@
 from PySide6.QtCore import (
     Qt, QCoreApplication, Signal as pyqtSignal, QSize, QRectF,
-    QPropertyAnimation, QEasingCurve, Property, QEvent,
+    QPropertyAnimation, QEasingCurve, Property, QEvent, QRegularExpression, QTimer,
 )
-from PySide6.QtGui import QPainter, QColor, QIcon
+from PySide6.QtGui import QPainter, QColor, QIcon, QIntValidator, QDoubleValidator, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QSizePolicy, QDialog, QDialogButtonBox, QLineEdit, QSpinBox,
-    QDoubleSpinBox, QVBoxLayout, QScrollArea, QButtonGroup, QToolButton,
+    QSizePolicy, QDialog, QDialogButtonBox, QLineEdit,
+    QVBoxLayout, QScrollArea, QButtonGroup, QToolButton,
 )
 
 from src.gui.theme import t, ColorThemeManager, theme_pixmap
@@ -31,7 +31,8 @@ from src.gui.widgets import (
 
 class TextInputDialog(QDialog):
     """iOS-style text input dialog."""
-    def __init__(self, title: str, current_value: str = "", parent=None):
+    def __init__(self, title: str, current_value: str = "", parent=None, *,
+                 bundle_identifier=False, pattern: str = None, placeholder: str = None):
         super().__init__(parent)
         ColorThemeManager.instance().theme_changed.connect(self._retheme)
         self.setWindowTitle(title)
@@ -45,15 +46,39 @@ class TextInputDialog(QDialog):
 
         self.input = QLineEdit()
         self.input.setText(current_value)
+        if bundle_identifier:
+            from src.tweaks.preference_validation import BUNDLE_IDENTIFIER_PATTERN
+            self.input.setMaxLength(255)
+            self.input.setValidator(QRegularExpressionValidator(
+                QRegularExpression(BUNDLE_IDENTIFIER_PATTERN), self.input))
+        elif pattern:
+            self.input.setValidator(QRegularExpressionValidator(
+                QRegularExpression(pattern), self.input))
         self.input.setAccessibleName(title)
-        self.input.setPlaceholderText(QCoreApplication.translate("TextInputDialog", "Enter value..."))
+        self.input.setPlaceholderText(
+            placeholder or QCoreApplication.translate("TextInputDialog", "Enter value..."))
         layout.addWidget(self.input)
+        if bundle_identifier:
+            self.input.setPlaceholderText("com.example.app")
+            hint = QLabel(self.tr("Leave empty to remove this app override."))
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         buttons.setStyleSheet(t("text_input_dialog"))
+        self._ok_button = buttons.button(QDialogButtonBox.Ok)
+        self.input.textChanged.connect(self._update_input_state)
+        self._update_input_state()
         layout.addWidget(buttons)
+
+    def _update_input_state(self):
+        self._ok_button.setEnabled(self.input.hasAcceptableInput())
+
+    def accept(self):
+        if self.input.hasAcceptableInput():
+            super().accept()
 
     def _retheme(self):
         self.setStyleSheet(t("text_input_dialog"))
@@ -77,14 +102,18 @@ def decimals_for_step(step) -> int:
     return len(text.split(".", 1)[1])
 
 
-class NumberInputDialog(QDialog):
-    """iOS-style number input dialog.
+def compact_number_text(value, locale, decimals):
+    if float(value) == 0:
+        return locale.toString(0)
+    text = locale.toString(float(value), 'f', decimals)
+    if locale.decimalPoint() in text:
+        text = text.rstrip(locale.zeroDigit()).rstrip(locale.decimalPoint())
+    return text
 
-    ``step`` picks the widget: an integral step keeps the integer spin box
-    (every existing numeric tweak), a finer one switches to a decimal box so
-    values like 0.5 are expressible. ``get_value`` returns an int in the
-    integral case and a float otherwise.
-    """
+
+class NumberInputDialog(QDialog):
+    """Number entry with integer or decimal validation based on the step."""
+
     def __init__(self, title: str, current_value: int = 0, min_val: int = 0, max_val: int = 999,
                  parent=None, step: float = 1.0):
         super().__init__(parent)
@@ -93,7 +122,6 @@ class NumberInputDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(320)
         self._retheme()
-
         self._decimals = decimals_for_step(step)
         self._integral = self._decimals == 0
 
@@ -101,25 +129,25 @@ class NumberInputDialog(QDialog):
         layout.setSpacing(16)
         layout.setContentsMargins(24, 24, 24, 24)
 
+        self.input = QLineEdit(self)
+        self.input.setAccessibleName(title)
+        self.input.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         if self._integral:
-            self.spin = QSpinBox()
-            self.spin.setRange(int(min_val), int(max_val))
-            self.spin.setValue(int(current_value))
-            self.spin.setButtonSymbols(QSpinBox.NoButtons)
+            validator = QIntValidator(int(min_val), int(max_val), self.input)
+            text = self.input.locale().toString(int(current_value))
         else:
-            self.spin = QDoubleSpinBox()
-            self.spin.setDecimals(self._decimals)
-            self.spin.setSingleStep(abs(float(step)))
-            self.spin.setRange(float(min_val), float(max_val))
-            self.spin.setValue(float(current_value))
-            self.spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.spin.setStyleSheet(t('number_input_field'))
-        layout.addWidget(self.spin)
+            validator = QDoubleValidator(float(min_val), float(max_val), self._decimals, self.input)
+            validator.setNotation(QDoubleValidator.StandardNotation)
+            text = compact_number_text(current_value, self.input.locale(), self._decimals)
+        validator.setLocale(self.input.locale())
+        self.input.setValidator(validator)
+        self.input.setText(text)
+        layout.addWidget(self.input)
         if not self._integral:
             hint = QLabel(QCoreApplication.translate("Nugget", "Range: {0} – {1} · Step: {2}").format(
-                self.spin.locale().toString(float(min_val), 'f', self._decimals),
-                self.spin.locale().toString(float(max_val), 'f', self._decimals),
-                self.spin.locale().toString(float(step), 'f', self._decimals)))
+                compact_number_text(min_val, self.input.locale(), self._decimals),
+                compact_number_text(max_val, self.input.locale(), self._decimals),
+                compact_number_text(step, self.input.locale(), self._decimals)))
             hint.setWordWrap(True)
             hint.setStyleSheet(t("home_subtitle"))
             layout.addWidget(hint)
@@ -127,21 +155,32 @@ class NumberInputDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        self._ok_button = buttons.button(QDialogButtonBox.Ok)
+        self.input.textChanged.connect(self._update_input_state)
+        self._update_input_state()
         layout.addWidget(buttons)
 
+    def _update_input_state(self):
+        self._ok_button.setEnabled(self.input.hasAcceptableInput())
+
     def _retheme(self):
-        self.setStyleSheet(t('number_input_dialog'))
-        if hasattr(self, 'spin'):
-            self.spin.setStyleSheet(t('number_input_field'))
+        self.setStyleSheet(t("text_input_dialog"))
 
     def showEvent(self, event):
         super().showEvent(event)
-        self.spin.setFocus(Qt.OtherFocusReason)
-        self.spin.selectAll()
+        self.input.setFocus(Qt.OtherFocusReason)
+        self.input.selectAll()
+
+    def accept(self):
+        if self.input.hasAcceptableInput():
+            super().accept()
 
     def get_value(self):
-        self.spin.interpretText()
-        value = self.spin.value()
+        locale = self.input.locale()
+        value, valid = (locale.toInt(self.input.text()) if self._integral
+                        else locale.toDouble(self.input.text()))
+        if not valid or not self.input.hasAcceptableInput():
+            raise ValueError("Enter a number within the allowed range.")
         return int(value) if self._integral else round(float(value), self._decimals)
 
 
@@ -161,6 +200,7 @@ class IOSSummaryDialog(QDialog):
                  extra_result: int = 2, parent=None, details_callback=None,
                  header_widget=None, acknowledge_text: str = "", preview_callback=None):
         super().__init__(parent)
+        ColorThemeManager.instance().theme_changed.connect(self._retheme)
         self.setWindowTitle(title)
         self.setModal(True)
         self.setMinimumWidth(560)
