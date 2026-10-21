@@ -22,8 +22,9 @@ override, select Reset Siri AI Overrides and apply. This clears *all* overrides;
 it does not restore a previous map. The ordinary Internal Options preference
 reset does not clear these archives; use the dedicated switch.
 
-Currently gated to iPhone 16 Pro (`iPhone17,1`), iOS 27.0. Only build 24A437 was
-reported verified upstream; other builds and hardware are not verified by us.
+Available on iPhones running iOS 27.0, without an individual model restriction.
+Only iPhone 16 Pro (`iPhone17,1`), build 24A437 was reported verified upstream;
+other builds and hardware are not verified by us.
 Siri language must be English (US); complete Siri AI consent in Settings after
 reboot. This does not add German voice support or guarantee server availability.
 

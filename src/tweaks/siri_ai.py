@@ -42,10 +42,9 @@ class SiriAITweak(Tweak):
     def apply_tweak(self, files_to_restore, version, model):
         if not self.enabled:
             return
-        # The archive schema is only verified on the research device/build.
-        # Do not let presets or the iOS 26 "untested tweaks" option bypass this.
-        if version != "27.0" or model != "iPhone17,1":
+        # Keep the OS/family gate even for presets and the iOS 26 untested option.
+        if version != "27.0" or not (model or "").startswith("iPhone"):
             raise NuggetException(
-                "Siri AI overrides are currently limited to iPhone 16 Pro on iOS 27.0. "
-                "Project Linwood verified build 24A437; other builds are untested.")
+                "Siri AI overrides currently require an iPhone on iOS 27.0. "
+                "Project Linwood verified iPhone 16 Pro, build 24A437; other devices and builds are untested.")
         files_to_restore.append(payload_file(self.action))

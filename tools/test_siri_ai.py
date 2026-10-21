@@ -49,7 +49,7 @@ class SiriAITests(unittest.TestCase):
         tweak.apply_tweak(files, '27.0', 'iPhone17,1')
         self.assertEqual(files, [])
         tweak.set_enabled(True)
-        for version, model in [('26.6', 'iPhone17,1'), ('27.0', 'iPhone16,1'),
+        for version, model in [('26.6', 'iPhone17,1'), ('27.0', 'iPad16,1'),
                                ('27.0.1', 'iPhone17,1'), ('', '')]:
             with self.assertRaises(NuggetException):
                 tweak.apply_tweak(files, version, model)
@@ -97,7 +97,14 @@ class SiriAITests(unittest.TestCase):
             self.assertTrue(SPECS_BY_ID[tid].experimental)
             self.assertIsNotNone(SPECS_BY_ID[tid].exclusive_with)
             self.assertEqual(compatibility_reasons(tid, '27.0', 'iPhone17,1'), [])
-            self.assertTrue(compatibility_reasons(tid, '27.0', 'iPhone18,1'))
+            self.assertEqual(compatibility_reasons(tid, '27.0', 'iPhone18,1'), [])
+            self.assertTrue(compatibility_reasons(tid, '27.0', 'iPad16,1'))
+            for model in ('iPhone16,1', 'iPhone18,1'):
+                operation = SiriAITweak(tweaks[tid].action)
+                operation.set_enabled(True)
+                files = []
+                operation.apply_tweak(files, '27.0', model)
+                self.assertEqual(len(files), 1)
 
     def test_payload_integrity_guard(self):
         with tempfile.TemporaryDirectory() as directory:
