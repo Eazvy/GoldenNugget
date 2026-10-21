@@ -1,3 +1,4 @@
+from src.controllers.settings import Settings
 from src.devicemanagement.device_capabilities import device_os_name
 from PySide6.QtCore import Qt, QCoreApplication, QTimer, QSize
 from PySide6.QtGui import QFont, QFontMetrics
@@ -520,5 +521,26 @@ class IOSStatusBarPage(QWidget):
 
 
     def _on_enabled_toggled(self, checked: bool):
+        settings = Settings("settings")
+        if checked and not settings.value("statusbar/signal_choice_done", False, type=bool):
+            current = (self.status_manager.get_gsm_signal_strength_bars_override()
+                       if self.status_manager.is_gsm_signal_strength_bars_overridden() else 4)
+            dialog = NumberInputDialog(
+                QCoreApplication.translate("Nugget", "Choose cellular signal bars (0–5)"),
+                current, 0, 5, self)
+            if dialog.exec() != QDialog.Accepted:
+                self._sync_controls_enabled()
+                return
+            value = dialog.get_value()
+            self.status_manager.set_gsm_signal_strength_bars(value)
+            card = self.gsm_row.parentWidget()
+            card.setProperty("overrideValue", value)
+            self.gsm_row.blockSignals(True)
+            self.gsm_row.setChecked(True)
+            self.gsm_row.blockSignals(False)
+            for label in card.findChildren(QLabel):
+                if "font-size: 14px" in label.styleSheet():
+                    label.setText(str(value))
+            settings.setValue("statusbar/signal_choice_done", True)
         self.status_manager.set_enabled(checked)
         self._sync_controls_enabled()
