@@ -764,7 +764,8 @@ class IOSPosterboardPage(QWidget):
         dialog.exec()
 
     def show_add_tendies_dialog(self):
-        from PySide6.QtWidgets import QFileDialog
+        from zipfile import BadZipFile
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
         selected_files, _ = QFileDialog.getOpenFileNames(
             self.window, QCoreApplication.translate("Nugget", "Select PosterBoard Files"), "", "Zip Files (*.tendies)"
         )
@@ -774,8 +775,19 @@ class IOSPosterboardPage(QWidget):
             except Exception:
                 device_version = None
             for file in selected_files:
-                if not tweaks[TweakID.PosterBoard].add_tendie(file, device_version):
-                    break
+                try:
+                    if not tweaks[TweakID.PosterBoard].add_tendie(file, device_version):
+                        break
+                except (BadZipFile, OSError, ValueError) as error:
+                    message = (QCoreApplication.translate(
+                        "Nugget", "This file is not a valid wallpaper ZIP archive. "
+                        "It may be incomplete or damaged. Download the original "
+                        ".tendies file again; renaming another file will not convert it.")
+                        if isinstance(error, BadZipFile) else str(error))
+                    QMessageBox.warning(
+                        self.window,
+                        QCoreApplication.translate("Nugget", "Import Failed"),
+                        os.path.basename(file) + "\n\n" + message)
             self.refresh_tendies()
 
     def refresh_tendies(self):

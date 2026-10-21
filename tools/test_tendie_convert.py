@@ -204,5 +204,28 @@ class ApplyConversionTests(unittest.TestCase):
                                         for path in extracted))
 
 
+class InvalidImportTests(unittest.TestCase):
+    def test_invalid_archive_warns_and_next_wallpaper_still_imports(self):
+        from src.gui.ios import posterboard as page
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = Path(directory) / 'broken.tendies'
+            invalid.write_text('<html>Download failed</html>')
+            valid = _modern_zip(directory)
+            tweak = pt.PosterboardTweak()
+            owner = SimpleNamespace(
+                window=None, refresh_tendies=Mock())
+            with patch('PySide6.QtWidgets.QFileDialog.getOpenFileNames',
+                       return_value=([str(invalid), valid], '')), \
+                 patch('PySide6.QtWidgets.QMessageBox.warning') as warning, \
+                 patch.dict(page.tweaks, {page.TweakID.PosterBoard: tweak}):
+                page.IOSPosterboardPage.show_add_tendies_dialog(owner)
+            warning.assert_called_once()
+            self.assertIn('broken.tendies', warning.call_args.args[2])
+            self.assertIn('not a valid wallpaper ZIP', warning.call_args.args[2])
+            self.assertEqual([item.path for item in tweak.tendies], [valid])
+            owner.refresh_tendies.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()
