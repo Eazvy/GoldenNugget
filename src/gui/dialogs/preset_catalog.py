@@ -281,6 +281,8 @@ class CatalogDialog(_ThemedDialog):
         for entry in self.visible_entries():
             mark = {preset_catalog.UPDATE: "  ·  " + _tr("Update available"),
                     preset_catalog.INSTALLED: "  ·  ✓"}.get(self.status_of(entry)[0], "")
+            if entry.untested:
+                mark += "  ·  ⚠ " + _tr("Not tested on a device")
             item = QListWidgetItem(f"{entry.name}\n{entry.author}{mark}")
             item.setData(Qt.ItemDataRole.UserRole, entry.id)
             item.setToolTip(", ".join(entry.tags))
@@ -332,6 +334,8 @@ class CatalogDialog(_ThemedDialog):
             parts.append(_tr("iOS {0}").format(entry.ios_range()))
         if entry.tags:
             parts.append(", ".join(entry.tags))
+        if entry.untested:
+            parts.append("⚠ " + _tr("not tested on a device by its author"))
         if state == preset_catalog.UPDATE:
             parts.append(_tr("a newer version than yours"))
         elif state == preset_catalog.INSTALLED:
@@ -508,6 +512,9 @@ class SubmitPresetDialog(_ThemedDialog):
         self.ios_min_edit = self._field(_tr("Lowest iOS"), _tr("Any"), ios, 8, details)
         self.ios_max_edit = self._field(_tr("Highest iOS"), _tr("Any"), "", 8, details)
         self._layout.addLayout(details)
+        self.tested_check = QCheckBox(_tr("I tested this preset on my iPhone"))
+        self.tested_check.setToolTip(_tr("Leave it off and the catalog marks the preset as not tested on a device."))
+        self._layout.addWidget(self.tested_check)
 
         from src.controllers.risk_assessment import assess
         from src.gui.ios.risk_panel import RiskPanel
@@ -556,7 +563,8 @@ class SubmitPresetDialog(_ThemedDialog):
             self.name_edit.text(), self.author_edit.text(), self.code,
             description=self.description_edit.toPlainText(),
             ios_min=self.ios_min_edit.text().strip(), ios_max=self.ios_max_edit.text().strip(),
-            tags=self.tags_edit.text().split(","), validate=self.pm._valid_import_structure)
+            tags=self.tags_edit.text().split(","), validate=self.pm._valid_import_structure,
+            untested=not self.tested_check.isChecked())
 
     def _submit(self):
         try:

@@ -140,14 +140,16 @@ def summary_markdown(rows, errors, only=None, templates=()):
     if shown:
         lines += ["| File | Name | Author | iOS | Tweaks | Risk | Why |", "|---|---|---|---|---|---|---|"]
         for relative, entry, level, reasons in shown:
-            lines.append(f"| `{relative}` | {_cell(entry.name)} | {_cell(entry.author)} | "
+            untested = " ⚠ not tested on a device" if entry.untested else ""
+            lines.append(f"| `{relative}` | {_cell(entry.name)}{untested} | {_cell(entry.author)} | "
                          f"{_cell(entry.ios_range() or 'any')} | {entry.tweak_count} | {level} | {_cell(reasons)} |")
         lines.append("")
     shown_templates = [item for item in templates if only is None or item[0] in only]
     for relative, entry in shown_templates:
         lines += [f"### Template `{relative}`", "",
                   f"**{_cell(entry.name)}** by {_cell(entry.author)} · iOS {_cell(entry.ios_range() or 'any')} · "
-                  + _size(entry.size) + (f" · restores to `{_cell(entry.domain)}`" if entry.domain else ""),
+                  + _size(entry.size) + (f" · restores to `{_cell(entry.domain)}`" if entry.domain else "")
+                  + (" · ⚠ not tested on a device" if entry.untested else ""),
                   ""]
         if entry.writes:
             lines += ["| Tweak | Writes |", "|---|---|"]
