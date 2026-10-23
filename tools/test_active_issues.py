@@ -74,8 +74,28 @@ class NotificationRecovery(unittest.TestCase):
     def test_shortcut_excludes_shared_services(self):
         for daemon in (Daemon.Spotlight, Daemon.CallAnalytics, Daemon.CoreDuet,
                        Daemon.MediaExperience, Daemon.Symptomsd, Daemon.DuetExpert,
-                       Daemon.Decisiond, Daemon.Sociald, Daemon.FollowUp, Daemon.Shazam):
+                       Daemon.Sociald, Daemon.FollowUp, Daemon.Shazam):
             self.assertNotIn(daemon, RECOMMENDED_ANALYTICS)
+
+    def test_removed_daemons_cannot_be_selected_or_applied_from_old_presets(self):
+        from src.tweaks.daemons_tweak import INTERFACE_KEYS
+        from src.tweaks.basic_plist_locations import FileLocation
+        from src.tweaks.tweak_classes import DaemonPlistTweak
+
+        removed = {"DeviceCheck": "com.apple.devicecheckd",
+                   "Translate": "com.apple.translated",
+                   "Decisiond": "com.apple.decisiond"}
+        for name, key in removed.items():
+            self.assertNotIn(name, Daemon.__members__)
+            self.assertNotIn(key, INTERFACE_KEYS)
+        # A stored preset may still contain the retired launchd keys.
+        values = dict.fromkeys(removed.values(), True)
+        values[Daemon.Tips.value[0]] = True
+        tweak = DaemonPlistTweak(FileLocation.disabledDaemons, values,
+                                 allowed_keys=INTERFACE_KEYS)
+        tweak.set_enabled(True)
+        self.assertEqual(tweak.apply_tweak({})[tweak.file_location],
+                         {Daemon.Tips.value[0]: True})
 
     def test_recovery_writes_explicit_enable_overrides_and_respects_hotload(self):
         from src.gui.ios.daemons import IOSDaemonsContent
