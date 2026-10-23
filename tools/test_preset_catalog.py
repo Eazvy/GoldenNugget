@@ -58,6 +58,18 @@ class Validation(unittest.TestCase):
         self.assertEqual(entry.description, 'Solid dock.')
         self.assertEqual(entry.ios_range(), '26.0+')
 
+    def test_untested_flag(self):
+        self.assertFalse(preset_catalog.validate_entry(raw(), 'solid-glass', VALID).untested)
+        entry = preset_catalog.validate_entry(raw(untested=True), 'solid-glass', VALID)
+        self.assertTrue(entry.untested)
+        self.assertTrue(entry.to_file()['untested'])
+        self.assertNotIn('untested', preset_catalog.validate_entry(raw(), 'solid-glass', VALID).to_file())
+        with self.assertRaises(CatalogError):
+            preset_catalog.validate_entry(raw(untested='yes'), 'solid-glass', VALID)
+        index = preset_catalog.build_index([entry], generated=5)
+        entries, rejected = preset_catalog.parse_index(json.dumps(index).encode(), VALID)
+        self.assertEqual((rejected, entries[0].untested), (0, True), 'the flag survives the index')
+
     def test_rejections(self):
         cases = [
             (raw(), 'Bad_Name'), (raw(), 'a'), (raw(name=''), 'ok-id'), (raw(author=3), 'ok-id'),
@@ -316,6 +328,9 @@ class Dialogs(unittest.TestCase):
         filename, text = dialog.build()
         self.assertEqual(filename, 'mine.json')
         self.assertEqual(json.loads(text)['tags'], ['glass', 'minimal'])
+        self.assertTrue(json.loads(text)['untested'], 'not tested unless the author says so')
+        dialog.tested_check.setChecked(True)
+        self.assertNotIn('untested', json.loads(dialog.build()[1]))
         with mock.patch('src.gui.dialogs.preset_catalog.QDesktopServices.openUrl') as opened, \
                 mock.patch('src.gui.dialogs.preset_catalog.QMessageBox.information'):
             dialog._submit()
