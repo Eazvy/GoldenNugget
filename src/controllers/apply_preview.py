@@ -86,6 +86,8 @@ def capture_preview(manager):
     from src.devicemanagement.device_capabilities import has_camera_control, has_dynamic_island, has_action_button, has_home_button, has_always_on_display
     from src.tweaks.tweak_names import TweakID
     from src.tweaks.tweaks import tweaks
+    from src.tweaks.store import selection_store
+    tweaks = selection_store(manager, tweaks)
 
     load_plist_tweaks()
     load_daemons()
@@ -117,14 +119,8 @@ def capture_preview(manager):
             continue
         if spec is not None and spec.experimental:
             model = context["device_model"] or ""
-            if (spec.unavailable_reason
-                    or (spec.ipad_only and not model.startswith("iPad"))
-                    or (spec.iphone_only and not model.startswith("iPhone"))
-                    or (spec.requires_action_button and not has_action_button(model))
-                    or (spec.requires_home_button and not has_home_button(model))
-                    or (spec.requires_always_on and not has_always_on_display(model))
-                    or (spec.requires_camera_control and not has_camera_control(model))
-                    or (spec.requires_dynamic_island and not has_dynamic_island(model))):
+            from src.tweaks.compatibility import hardware_reasons
+            if spec.unavailable_reason or hardware_reasons(spec, model):
                 continue
         if tid == TweakID.PosterBoard:
             for item in tweak.tendies[:MAX_TENDIES_PER_RESTORE]:

@@ -1,3 +1,4 @@
+import shutil
 # PEP 810: defer operation-only dependencies on Python 3.15+; eager on older Python.
 __lazy_modules__ = (
     "src.controllers",
@@ -356,23 +357,16 @@ class PosterboardTweak(Tweak):
             contents_path = os.path.join(video_output_dir, "versions", "0", "contents", "0EFB6A0F-7052-4D24-8859-AB22BADF2E93")
 
             # convert the video first
-            video_contents = None
-            if self.videoFile.endswith('.mov'):
-                # no need to convert
-                with open(self.videoFile, "rb") as vid:
-                    video_contents = vid.read()
+            video_path = os.path.join(contents_path, "output.layerStack", "portrait-layer_settling-video.MOV")
+            if self.videoFile.lower().endswith('.mov'):
+                shutil.copyfile(self.videoFile, video_path)
             else:
-                # convert to mov
-                video_contents = video_handler.convert_to_mov(input_file=self.videoFile)
-            # now replace video
-            with open(os.path.join(contents_path, "output.layerStack", "portrait-layer_settling-video.MOV"), "wb") as overriding:
-                overriding.write(video_contents)
+                video_handler.convert_to_mov(input_file=self.videoFile, output_file=video_path)
             aar_path = os.path.join(contents_path, "input.segmentation", "segmentation.data.aar")
-            wrap_in_aar(get_bundle_files("files/posterboard/contents.plist"), video_contents, aar_path)
+            wrap_in_aar(get_bundle_files("files/posterboard/contents.plist"), video_path, aar_path)
 
             # replace the heic files
             if self.videoThumbnail != None:
-                del video_contents
                 with open(self.videoThumbnail, "rb") as thumb:
                     thumb_contents = thumb.read()
             else:

@@ -40,6 +40,7 @@ class FakeDeviceManager:
     def __init__(self, version):
         self.version = version
         self.written: dict = {}
+        self.owners: dict = {}
         self.restored = None
         self.skip_setup_args = None
         self.session_opened = False
@@ -58,6 +59,7 @@ class FakeDeviceManager:
     # --- what _reset_tweaks builds into ----------------------------------
     def concat_file(self, contents, path, files_to_restore, owner=None, group=None):
         self.written[path] = contents
+        self.owners[path] = (owner, group)
         files_to_restore.append(path)
 
     async def add_skip_setup(self, files_to_restore, restoring_domains):
@@ -152,14 +154,14 @@ def test_ios27_writes_valid_empty_plists():
               f"{len(data) if data else 0} bytes")
 
 
-def test_ios26_keeps_zero_byte_files():
-    print("\niOS 26 reset: unchanged zero-byte behaviour")
+def test_ios26_writes_valid_empty_plists():
+    print("\niOS 26 reset: parseable empty plists")
     fake, errors, _ = run_reset("26.2", [Page.Springboard])
     check("no exception escaped the reset", not errors, repr(errors[:1]))
     check("no lockdown session was opened", not fake.session_opened)
     for path in (FileLocation.springboard.value, FileLocation.uikit.value):
-        check(f"{path} is zero-byte (original Nugget behaviour)",
-              fake.written.get(path) == b"", repr(fake.written.get(path)))
+        check(f"{path} parses as an empty dictionary",
+              plistlib.loads(fake.written[path]) == {})
 
 
 SPRINGBOARD_MIRROR = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
@@ -188,13 +190,44 @@ def test_ios27_clears_managed_pref_mirrors():
               f"{len(data) if data else 0} bytes")
 
 
-def test_ios26_leaves_app_mirrors_alone():
-    print("\niOS 26 reset: app-domain mirrors untouched (no Phase 3 to undo)")
+def test_ios26_clears_app_mirrors():
+    print("\niOS 26 reset: clears app-domain mirrors")
     fake, errors, _ = run_reset("26.2", [Page.Springboard])
     check("no exception escaped the reset", not errors, repr(errors[:1]))
-    check("no app-domain springboard/uikit mirror written",
-          SPRINGBOARD_MIRROR not in fake.written and UIKIT_MIRROR not in fake.written,
-          repr(sorted(fake.written)))
+    for path in (SPRINGBOARD_MIRROR, UIKIT_MIRROR):
+        check(f"{path} parses as an empty dictionary",
+              plistlib.loads(fake.written[path]) == {})
+        check(f"{path} belongs to mobile", fake.owners[path] == (501, 501))
+
+
+def test_registry_reset_coverage():
+    print("\nReset covers registry preference files, including previously omitted domains")
+    from src.tweaks.registry import SPECS, Section, HOME_PREFIX, managed_pref_target
+    sections = {
+        Page.Springboard: Section.SPRINGBOARD,
+        Page.InternalOptions: Section.INTERNAL,
+        Page.LiquidGlass: Section.LIQUID_GLASS,
+    }
+    for version in ("26.2", "26.7", "27.0"):
+        for page, section in sections.items():
+            fake, errors, _ = run_reset(version, [page])
+            check(f"{version} {page.name} reset succeeds", not errors, repr(errors))
+            for path in {s.location.value for s in SPECS
+                         if s.section == section and s.location.value.endswith(".plist")}:
+                check(f"{version} {page.name} resets {path}",
+                      plistlib.loads(fake.written[path]) == {})
+                mirror = managed_pref_target(path)
+                if mirror:
+                    check(f"{version} resets the mirror for {path}",
+                          plistlib.loads(fake.written[HOME_PREFIX + mirror]) == {})
+            check("opaque Siri AI archive never replaced by an empty plist",
+                  FileLocation.siriAIOverrides.value not in fake.written)
+    fake, errors, _ = run_reset("27.0", list(sections))
+    check("overlapping sections produce one write per path",
+          not errors and len(fake.restored) == len(set(fake.restored)))
+    fake, errors, _ = run_reset("27.0", [Page.Springboard])
+    check("Springboard reset leaves Internal-only domains alone",
+          not errors and FileLocation.notes.value not in fake.written)
 
 
 def test_ios26_daemons_page_still_written():
@@ -251,16 +284,17 @@ def test_status_bar_is_always_resettable():
         check(f"{version} reset offers Status Bar",
               Page.StatusBar in pages, repr([p.getPageName() for p in pages]))
         check(f"{version} reset keeps the other sections",
-              {Page.Springboard, Page.InternalOptions, Page.Daemons} <= set(pages),
+              {Page.Springboard, Page.LiquidGlass, Page.InternalOptions, Page.Daemons} <= set(pages),
               repr([p.getPageName() for p in pages]))
 
 
 # =============================================================================
 test_capture_is_gone()
 test_ios27_writes_valid_empty_plists()
-test_ios26_keeps_zero_byte_files()
+test_ios26_writes_valid_empty_plists()
 test_ios27_clears_managed_pref_mirrors()
-test_ios26_leaves_app_mirrors_alone()
+test_ios26_clears_app_mirrors()
+test_registry_reset_coverage()
 test_ios26_daemons_page_still_written()
 test_ios27_status_bar_resets_the_archive()
 test_ios26_status_bar_still_resets_the_classic_file()

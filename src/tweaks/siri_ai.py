@@ -42,9 +42,17 @@ class SiriAITweak(Tweak):
     def apply_tweak(self, files_to_restore, version, model):
         if not self.enabled:
             return
-        # Keep the OS/family gate even for presets and the iOS 26 untested option.
-        if version != "27.0" or not (model or "").startswith("iPhone"):
+        from src.devicemanagement.constants import Version
+        from src.devicemanagement.device_capabilities import has_apple_intelligence
+        try:
+            supported_version = Version("27") <= Version(version) < Version("28")
+        except (ValueError, TypeError):
+            supported_version = False
+        supported_model = (model or "").startswith("iPhone") and (
+            self.action == "reset" or has_apple_intelligence(model))
+        if not supported_version or not supported_model:
             raise NuggetException(
-                "Siri AI overrides currently require an iPhone on iOS 27.0. "
+                "Siri AI overrides require an iPhone 15 Pro or later on iOS 27.x. "
+                "Reset is available on all iPhones running iOS 27.x. "
                 "Project Linwood verified iPhone 16 Pro, build 24A437; other devices and builds are untested.")
         files_to_restore.append(payload_file(self.action))

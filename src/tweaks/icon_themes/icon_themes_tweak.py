@@ -12,6 +12,7 @@ supported version.
 """
 
 import os
+from collections import OrderedDict
 import plistlib
 import shutil
 import tempfile
@@ -67,19 +68,23 @@ class IconThemesTweak(Tweak):
         return not self.is_empty()
 
     def is_empty(self) -> bool:
-        return len(self.themes) == 0
+        return not self._theme_index
+
+    @property
+    def themes(self):
+        """Ordered snapshot; assign a sequence to replace the collection."""
+        return list(self._theme_index.values())
+
+    @themes.setter
+    def themes(self, themes):
+        self._theme_index = OrderedDict((theme.bundle_id, theme) for theme in themes)
 
     def add_theme(self, theme: IconTheme):
-        # Replace an existing theme for the same bundle instead of adding a
-        # second (and potentially conflicting) WebClip folder.
-        for existing in self.themes:
-            if existing.bundle_id == theme.bundle_id:
-                self.themes.remove(existing)
-                break
-        self.themes.append(theme)
+        self._theme_index.pop(theme.bundle_id, None)
+        self._theme_index[theme.bundle_id] = theme
 
     def remove_theme(self, bundle_id: str):
-        self.themes = [t for t in self.themes if t.bundle_id != bundle_id]
+        self._theme_index.pop(bundle_id, None)
 
     @staticmethod
     def strip_icon_suffix(filename: str) -> str:

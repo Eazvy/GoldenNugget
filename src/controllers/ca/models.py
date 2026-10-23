@@ -7,7 +7,9 @@ renderer branches on ``Layer.type`` just like the TSX renderers do.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
 
@@ -209,7 +211,26 @@ class CADocument:
     stateOverrides: StateOverride = field(default_factory=dict)
     stateTransitions: List[StateTransition] = field(default_factory=list)
     parallax: List[ParallaxGroup] = field(default_factory=list)
-    assets: Dict[str, bytes] = field(default_factory=dict)
+    assets: Mapping[str, bytes] = field(default_factory=dict)
+    revision: int = field(default=0, compare=False)
+
+    def touch(self):
+        """Invalidate derived render data after an in-place edit."""
+        self.revision += 1
+        layers = [self.root] if self.root else []
+        while layers:
+            layer = layers.pop()
+            for animation in layer.animations or ():
+                animation.__dict__.pop('_prepared_track', None)
+            layers.extend(layer.children)
+
+    @contextmanager
+    def edit(self):
+        """Group mutable edits and invalidate all derived data on exit."""
+        try:
+            yield self
+        finally:
+            self.touch()
 
 
 @dataclass

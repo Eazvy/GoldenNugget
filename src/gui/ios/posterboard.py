@@ -735,16 +735,21 @@ class IOSPosterboardPage(QWidget):
             return
         try:
             path = os.path.join(directory, f"Nugget-Export-{uuid.uuid4()}")
-            tweaks[TweakID.PosterBoard].create_video_loop_files(output_dir=path)
             zip_path = path + ".tendies"
-            make_archive(path, 'zip', path)
-            os.rename(path + '.zip', zip_path)
-            rmtree(path)
+            from src.gui.dialogs.file_task import run_file_task
+            def export():
+                try:
+                    tweaks[TweakID.PosterBoard].create_video_loop_files(output_dir=path)
+                    make_archive(path, 'zip', path)
+                    os.rename(path + '.zip', zip_path)
+                finally:
+                    rmtree(path, ignore_errors=True)
+            run_file_task(self.window, QCoreApplication.translate("Nugget", "Export Video"), export)
             print(f"Created at {zip_path}")
             if os.name == 'nt':
                 subprocess.Popen(f'explorer "{os.path.normpath(zip_path)}"')
             else:
-                subprocess.call(["open", '-R', zip_path])
+                subprocess.Popen(["open", '-R', zip_path])
         except Exception as e:
             QMessageBox.critical(
                 self.window, QCoreApplication.translate("QtCore.QCoreApplication", "Error!"),

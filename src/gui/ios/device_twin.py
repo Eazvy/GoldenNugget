@@ -76,6 +76,7 @@ VISIBLE = {
     "NoLiquidDock": QT_TRANSLATE_NOOP("DeviceTwin", "Solid Dock"),
     "UseFlatIconsEverywhere": QT_TRANSLATE_NOOP("DeviceTwin", "Flat icons"),
     "SBHideSearchAffordance": QT_TRANSLATE_NOOP("DeviceTwin", "Search button hidden"),
+    "SBHomeScreenShowsSearchButton": QT_TRANSLATE_NOOP("DeviceTwin", "Search button hidden"),
     "DisableSecondsHand": QT_TRANSLATE_NOOP("DeviceTwin", "Clock icon without seconds hand"),
     "SBBuildNumber": QT_TRANSLATE_NOOP("DeviceTwin", "Build number in the status bar"),
     "RTL": QT_TRANSLATE_NOOP("DeviceTwin", "Right-to-left layout"),
@@ -138,7 +139,7 @@ def build_state(tweaks_data, version="", model="", build="", wallpaper=None) -> 
     state.glass_clock = "NoLiquidClock" not in on
     state.glass_dock = "NoLiquidDock" not in on
     state.glass_icons = "UseFlatIconsEverywhere" not in on
-    state.search_button = "SBHideSearchAffordance" not in on
+    state.search_button = not {"SBHideSearchAffordance", "SBHomeScreenShowsSearchButton"}.intersection(on)
     state.seconds_hand = "DisableSecondsHand" not in on
     state.rtl = "RTL" in on
     if "SBBuildNumber" in on:

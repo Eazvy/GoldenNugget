@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 # PEP 810: defer operation-only dependencies on Python 3.15+; eager on older Python.
 __lazy_modules__ = (
     "pymobiledevice3.services.mobile_config",
@@ -34,6 +35,7 @@ from src.exceptions.device_errors import (
     is_find_my_error,
 )
 from src.controllers.hotload import HotLoad
+from src.tweaks.compatibility import hardware_reasons
 from src.restore.skip_setup27 import build_cloud_config
 
 # Bump SSL handshake timeout from 10s to 60s for all lockdown services.
@@ -65,7 +67,7 @@ from src.tweaks.posterboard.posterboard_tweak import PosterboardTweak
 from src.tweaks.posterboard.template_options.templates_tweak import TemplatesTweak
 from src.tweaks.icon_themes.icon_themes_tweak import IconThemesTweak
 from src.tweaks.basic_plist_locations import FileLocation
-from src.tweaks.registry import HOME_PREFIX, managed_pref_target
+from src.tweaks.registry import HOME_PREFIX, SPECS, Section, managed_pref_target
 
 from src.restore.restore import restore_files, FileToRestore
 from src.restore.afc_media import (
@@ -145,9 +147,22 @@ def show_apply_error(e: Exception, update_label=lambda x: None, files_list: list
             backup_path=backup_path
         )
 
+def _selection_store(manager):
+    from src.tweaks.store import selection_store
+    return selection_store(manager, tweaks)
+
+
 class DeviceManager:
     ## Class Functions
-    def __init__(self):
+    @property
+    def tweak_store(self):
+        selected = getattr(self, "_selected_store", None)
+        return selected if selected is not None else tweaks
+
+    def __init__(self, tweak_store=None):
+        if tweak_store is not None and not isinstance(tweak_store, Mapping):
+            raise TypeError("tweak_store must be a mapping")
+        self._selected_store = tweak_store
         self.devices: list[Device] = []
         self.data_singleton = DataSingleton()
         self.current_device_index = 0
@@ -224,12 +239,11 @@ class DeviceManager:
             self.devices = []
             self.set_current_device(index=None)
             return
-        # Connect via usbmuxd
-        seen_udids = set()
+        unique = {}
         for device in sorted(connected_devices, key=lambda item: not item.is_usb):
-            normalized_udid = device.serial.replace("-", "").casefold()
-            if normalized_udid in seen_udids:
-                continue
+            unique.setdefault(device.serial.replace("-", "").casefold(), device)
+
+        async def inspect_device(device):
             try:
                 async with lockdown_session(device.serial, pair_timeout=1, connection_type="USB") as ld:
                     # Check backup encryption status if experimental option not enabled
@@ -237,9 +251,14 @@ class DeviceManager:
                         try:
                             from pymobiledevice3.services.mobilebackup2 import Mobilebackup2Service
                             mb = Mobilebackup2Service(ld)
-                            await mb.connect()
-                            is_encrypted = await mb.get_will_encrypt()
-                            await mb.close()
+                            try:
+                                await mb.connect()
+                                is_encrypted = await mb.get_will_encrypt()
+                            finally:
+                                try:
+                                    await mb.close()
+                                except Exception:
+                                    pass
                             if is_encrypted:
                                 show_alert(ApplyAlertMessage(
                                     txt=QCoreApplication.tr("Backup encryption is enabled on your iPhone."),
@@ -252,7 +271,7 @@ class DeviceManager:
                                     )
                                 ))
                                 # skip only this device; the others stay usable
-                                continue
+                                return None
                         except Exception:
                             pass  # If we can't check, continue anyway
                     vals = ld.all_values
@@ -297,8 +316,7 @@ class DeviceManager:
                         dev.developer_mode = await read_developer_mode(ld)
                     except Exception:
                         dev.developer_mode = None
-                    discovered.append(dev)
-                    seen_udids.add(normalized_udid)
+                    return dev
             except PasswordRequiredError as e:
                 show_alert(ApplyAlertMessage(
                     txt=QCoreApplication.tr("Unlock your iPhone or iPad to connect. Enter the passcode on the device, not on this computer."),
@@ -321,6 +339,17 @@ class DeviceManager:
                 show_alert(ApplyAlertMessage(txt=f"{type(e).__name__}: {repr(e)}", detailed_txt=str(traceback.format_exc()),
                                             exc_type=type(e), exc_value=e))
         
+        semaphore = asyncio.Semaphore(3)
+        async def bounded_inspect(device):
+            async with semaphore:
+                try:
+                    return await asyncio.wait_for(inspect_device(device), timeout=15)
+                except asyncio.TimeoutError:
+                    show_alert(ApplyAlertMessage(txt=QCoreApplication.tr("Getting the device list timed out.") + f" ({device.serial})"))
+                    return None
+        results = await asyncio.gather(*(bounded_inspect(device) for device in unique.values()))
+        discovered = [device for device in results if device is not None]
+
         self.devices = discovered
         if len(self.devices) > 0:
             selected_index = next(
@@ -384,16 +413,12 @@ class DeviceManager:
         
     async def _reset_device_pairing(self):
         # first, unpair it
-        if self.data_singleton.current_device == None:
-            return
+        if self.data_singleton.current_device is None:
+            raise NuggetException("No device is selected. Connect the device before resetting pairing.")
         async with lockdown_session(self.data_singleton.current_device.udid) as ld:
             await ld.unpair()
             # next, pair it again
             await ld.pair()
-        QMessageBox.information(
-            None,
-            QCoreApplication.tr("Pairing Reset"),
-            QCoreApplication.tr("Your device's pairing was successfully reset. Refresh the device list before applying."))
 
     async def add_skip_setup(self, files_to_restore: list[FileToRestore], restoring_domains: bool):
         # TODO: Probably should move this to its own file
@@ -462,6 +487,7 @@ class DeviceManager:
 
     async def start_restore(self, files_to_restore: list[FileToRestore], update_label=lambda x: None, backup_password: str = "", prepared_backup_root: str = None, skip_protective_backup: bool = False, include_keychain: bool = False, prompt_choice=None, supervised: bool = False, organization_name: str = ""):
         # hard-block any restore on an unsupported (old) iOS version
+        tweaks = _selection_store(self)
         self._raise_if_unsupported()
         self.update_label = update_label
         self._restore_eta.reset()
@@ -606,6 +632,7 @@ class DeviceManager:
             update_label(label)
         return _cb
     def _disable_unavailable_controls(self, update_label):
+        tweaks = _selection_store(self)
         from src.gui.ios.compat import compatibility_reasons
         from src.tweaks.registry import SPECS_BY_ID
 
@@ -639,6 +666,7 @@ class DeviceManager:
     def apply_changes(self, update_label=lambda x: None, show_alert=lambda x: None, prompt_password=None, prompt_choice=None):
         return asyncio.run(self._apply_changes(update_label, show_alert, prompt_password, prompt_choice))
     async def _apply_changes(self, update_label=lambda x: None, show_alert=lambda x: None, prompt_password=None, prompt_choice=None):
+        tweaks = _selection_store(self)
         files_to_restore: list[FileToRestore] = []
         final_alert = None
         self._last_operation_preview = None
@@ -661,13 +689,7 @@ class DeviceManager:
                     from src.tweaks.preference_validation import valid_bundle_identifier
                     if not valid_bundle_identifier(selected.value):
                         raise NuggetException(f"Enter a valid app bundle identifier for {spec.title}, or clear the field.")
-                if ((spec.ipad_only and not device_model.startswith("iPad"))
-                        or (spec.iphone_only and not device_model.startswith("iPhone"))
-                        or (spec.requires_action_button and not has_action_button(device_model))
-                        or (spec.requires_home_button and not has_home_button(device_model))
-                        or (spec.requires_always_on and not has_always_on_display(device_model))
-                        or (spec.requires_dynamic_island and not has_dynamic_island(device_model))
-                        or (spec.requires_camera_control and not has_camera_control(device_model))
+                if (hardware_reasons(spec, device_model)
                         or (spec.min_version and device_version < Version(spec.min_version))):
                     raise NuggetException(f"{spec.title} is not available for the connected device.")
                 required_options = spec.requires if spec.kind != Kind.NUMBER or selected.value != spec.value else ()
@@ -827,6 +849,7 @@ class DeviceManager:
         disabled-daemons plist for this exact apply, regardless of the UI
         toggles or whatever a loaded preset said. Runs right before the
         tweak pass so the forced keys ride along with every apply."""
+        tweaks = _selection_store(self)
         try:
             dm_settings = getattr(getattr(self, "pref_manager", None), "settings", None)
             hotload = HotLoad(dm_settings)
@@ -865,18 +888,21 @@ class DeviceManager:
         prepared, pb_ok = await self._build_protective_backup(
             update_label, needs_posterboard, prompt_password)
         media_src = getattr(prepared, "media_src", "") if prepared else ""
-        if media_src and not media_store_verified(media_src):
+        media_verified = not media_src or await asyncio.to_thread(media_store_verified, media_src)
+        if not media_verified:
             log_warn("AFC media backup could not be verified; creating a fresh standard backup with photos included. Existing backups will be retained.")
             update_label(QCoreApplication.tr("Photo backup over AFC could not be verified. Backing up photos and device data through the standard backup service…"))
             self._report_operation_stage("backup", "photos")
             prepared, pb_ok = await self._build_protective_backup(
                 update_label, needs_posterboard, prompt_password,
                 force_standard_media=True)
-        self._require_media_copy(prepared)
+            media_src = getattr(prepared, "media_src", "") if prepared else ""
+            media_verified = not media_src or await asyncio.to_thread(media_store_verified, media_src)
+        self._require_media_copy(prepared, media_verified=media_verified)
         return prepared, pb_ok
 
     @staticmethod
-    def _require_media_copy(prepared) -> None:
+    def _require_media_copy(prepared, *, media_verified=None) -> None:
         """Abort before the wipe if the photos are not safely on this computer.
 
         When the AFC media channel carries the bulk photo trees, those trees are
@@ -888,11 +914,13 @@ class DeviceManager:
         media_src = getattr(prepared, "media_src", "") if prepared else ""
         if not media_src:
             return
-        if media_store_verified(media_src):
+        if media_verified is None:
+            media_verified = media_store_verified(media_src)
+        if media_verified:
             return
         raise NuggetException(
             f"The photos/videos could not be fully backed up "
-            f"({describe_media_store(media_src)}). Applying tweaks would wipe "
+            f"({describe_media_store(media_src, verified=False)}). Applying tweaks would wipe "
             f"the device with no complete copy of the media, so it was stopped "
             f"before anything was changed. The media backup could not be verified. "
             f"Check the application log; the backup cache can be refreshed from "
@@ -926,6 +954,7 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
         pass, so the heavy backup serves no purpose there — PosterBoard
         delivery goes through ``_backup_posterboard_database`` instead.
         """
+        tweaks = _selection_store(self)
         udid = self.get_current_device_udid()
         if not udid:
             return None, False
@@ -1053,7 +1082,7 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
             # as in sync, so a partial one always forces a refresh (which redoes
             # the pull) instead of being carried into the wipe.
             media_ready = (not use_afc_media
-                           or media_store_verified(str(cache.media_dir)))
+                           or await asyncio.to_thread(media_store_verified, str(cache.media_dir)))
             # fast path: a fresh cache (no wallpapers pending, media already in
             # sync) is reused as-is — no device session at all; past the TTL it
             # gets an incremental refresh. The AFC media store has to exist too,
@@ -1132,6 +1161,7 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
         destination/action message. Any fetch failure aborts before restore;
         continuing could use a stale database or mask the actual error.
         """
+        tweaks = _selection_store(self)
         udid = self.get_current_device_udid()
         if not udid:
             raise NuggetException("Connect and select a device before fetching the PosterBoard database.")
@@ -1178,193 +1208,21 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
         Returns (alert, files_to_restore) so the caller can surface the result
         and keep the file list for error reporting.
         """
+        tweaks = _selection_store(self)
         if templates is None:
             templates = tweaks[TweakID.Templates].templates
-        # create the other plists
-        basic_plists: dict = {}
-        basic_plists_ownership: dict = {}
-        files_data: dict = {}
-        uses_domains: bool = False
-        # create the restore file list
-        files_to_restore: list[FileToRestore] = [
-        ]
-        tmp_dirs = [] # temporary directory for unzipping pb and template files
-
-        hotload = HotLoad(self.pref_manager.settings)
-        hotload_version = self.get_current_device_version()
-        hotload_model = self.get_current_device_model()
-        hotload_skipped = []
-        unavailable_controls = self._disable_unavailable_controls(update_label)
-        from src.tweaks.registry import SPECS_BY_ID
-        from src.tweaks.siri_ai import SiriAITweak
-        # stale/blocked tweaks are skipped; whole hidden features are never applied
-        hotload_hidden_names = hotload.hidden_tweak_names(
-            device_version=hotload_version, device_model=hotload_model)
-
+        from src.controllers.tweak_compiler import CompilationContext, compile_tweaks
+        context = CompilationContext(
+            store=tweaks, version=self.get_current_device_version(),
+            model=self.get_current_device_model(), templates=templates,
+            force_pb_refresh=getattr(self.pref_manager, "auto_refresh_posterboard", True),
+            prepare_setup=self.add_skip_setup, concat_file=self.concat_file,
+            add_community_files=self._add_community_files, update_label=update_label)
+        artifacts = await compile_tweaks(
+            context, HotLoad(self.pref_manager.settings), self._disable_unavailable_controls(update_label))
+        self._last_community_writes = artifacts.community_writes
+        files_to_restore = artifacts.files
         try:
-            # set the plist keys
-            for tweak_name in tweaks:
-                tweak = tweaks[tweak_name]
-                if tweak_name in unavailable_controls:
-                    continue
-                spec = SPECS_BY_ID.get(tweak_name)
-                if spec is not None and spec.experimental:
-                    if (spec.unavailable_reason
-                            or (spec.ipad_only and not hotload_model.startswith("iPad"))
-                            or (spec.iphone_only and not hotload_model.startswith("iPhone"))
-                            or (spec.requires_action_button and not has_action_button(hotload_model))
-                            or (spec.requires_home_button and not has_home_button(hotload_model))
-                            or (spec.requires_always_on and not has_always_on_display(hotload_model))
-                            or (spec.requires_camera_control and not has_camera_control(hotload_model))
-                            or (spec.requires_dynamic_island and not has_dynamic_island(hotload_model))):
-                        continue
-                if (tweak_name in (TweakID.Daemons, TweakID.ClearScreenTimeAgentPlist)
-                        and not tweaks[TweakID.Daemons].enabled):
-                    continue
-                if (tweak_name in (TweakID.SBAlwaysShowSystemApertureInSnapshots,
-                                   TweakID.HideDICompletely)
-                        and not has_dynamic_island(hotload_model)):
-                    continue
-                # HotLoad: never apply tweaks flagged as dangerous/broken for
-                # this device / iOS version (kill switch off -> no rules match),
-                # and never apply tweaks of a hidden feature.
-                if (tweak_name.name in hotload_hidden_names
-                        or hotload.rule_for(tweak_name,
-                                            device_version=hotload_version,
-                                            device_model=hotload_model) is not None):
-                    hotload_skipped.append(tweak_name)
-                    continue
-                if isinstance(tweak, SiriAITweak):
-                    if tweak.enabled:
-                        peer = (TweakID.ResetSiriAIOverrides if tweak_name == TweakID.SiriAI
-                                else TweakID.SiriAI)
-                        if tweaks[peer].enabled:
-                            raise NuggetException("Choose either Siri AI or Reset Siri AI Overrides, not both.")
-                        tweak.apply_tweak(files_to_restore, hotload_version, hotload_model)
-                        uses_domains = True
-                    continue
-                if isinstance(tweak, ReversibleBooleanPlistTweak):
-                    basic_plists = tweak.apply_tweak(basic_plists)
-                    basic_plists_ownership[tweak.file_location] = tweak.owner
-                    continue
-                if isinstance(tweak, BasicPlistTweak) or isinstance(tweak, AdvancedPlistTweak):
-                    basic_plists = tweak.apply_tweak(basic_plists)
-                    basic_plists_ownership[tweak.file_location] = tweak.owner
-                elif isinstance(tweak, NullifyFileTweak):
-                    tweak.apply_tweak(files_data)
-                    if tweak.enabled and tweak.file_location.value.startswith("/var/mobile/"):
-                        uses_domains = True
-                elif isinstance(tweak, PosterboardTweak) or isinstance(tweak, TemplatesTweak):
-                    tmp_dirs.append(TemporaryDirectory())
-                    tweak.apply_tweak(
-                        files_to_restore=files_to_restore,
-                        output_dir=fix_windows_path(tmp_dirs[len(tmp_dirs)-1].name),
-                        templates=templates,
-                        version=self.get_current_device_version(),
-                        force_pb_refresh=self.pref_manager.auto_refresh_posterboard,
-                        update_label=update_label
-                    )
-                    if tweak.uses_domains():
-                        uses_domains = True
-                elif isinstance(tweak, IconThemesTweak):
-                    tweak.apply_tweak(
-                        files_to_restore=files_to_restore,
-                        update_label=update_label
-                    )
-                    if tweak.uses_domains():
-                        uses_domains = True
-                elif isinstance(tweak, StatusBarTweak):
-                    if Version(self.get_current_device_version()) >= Version("27.0"):
-                        # iOS 27: the classic binary statusBarOverrides file is
-                        # dead and the Speakeasy feature flag cannot be written,
-                        # but SpringBoard unarchives the carrier name itself
-                        # from StatusBarOverrides.archive in HomeDomain.
-                        tweak.apply_ios27_tweak(files_to_restore)
-                        if tweak.enabled:
-                            uses_domains = True
-                    else:
-                        # iOS 26 and below: classic binary statusBarOverrides
-                        # in HomeDomain.
-                        tweak.apply_classic_tweak(files_to_restore)
-                        if tweak.enabled:
-                            uses_domains = True
-            # Community tweaks from .batter templates. Their plist keys merge
-            # into the same files the built-in tweaks write (built-in keys win
-            # a clash); whole files may not replace one GoldenNugget writes.
-            community_plists, community_files = {}, {}
-            if TweakID.Templates in tweaks and TweakID.Templates not in hotload_skipped:
-                community_plists, community_files = tweaks[TweakID.Templates].community_writes(
-                    self.get_current_device_version())
-                if community_plists or community_files:
-                    uses_domains = True
-            # kept for the reset record; the merge below pops from community_plists
-            self._last_community_writes = (dict(community_plists), dict(community_files))
-
-            if hotload_skipped:
-                names = sorted(t.name if hasattr(t, "name") else str(t) for t in hotload_skipped)
-                update_label(QCoreApplication.tr(
-                    "Skipped HotLoad-flagged tweaks: ") + ", ".join(names))
-
-            daemon = tweaks.get(TweakID.Daemons)
-            if daemon is not None:
-                forced = hotload.disabled_daemon_keys(
-                    device_version=hotload_version, device_model=hotload_model) - daemon.never_enable
-                if forced:
-                    basic_plists.setdefault(FileLocation.disabledDaemons, {}).update(
-                        dict.fromkeys(forced, True))
-                    basic_plists_ownership[FileLocation.disabledDaemons] = 0
-
-            # Generate backup
-            update_label(QCoreApplication.tr("Generating backup..."))
-            is_ios27 = Version(self.get_current_device_version()) >= Version("27.0")
-            await self.add_skip_setup(files_to_restore, uses_domains)
-            for location, plist in basic_plists.items():
-                if location in basic_plists_ownership:
-                    ownership = basic_plists_ownership[location]
-                else:
-                    ownership = 501
-                if location.value in community_plists:
-                    plist = {**community_plists.pop(location.value)[0], **plist}
-                self.concat_file(
-                    contents=plistlib.dumps(plist),
-                    path=location.value,
-                    files_to_restore=files_to_restore,
-                    owner=ownership, group=ownership
-                )
-                app_pref = managed_pref_target(location.value) if is_ios27 else None
-                if app_pref and location != FileLocation.globalPreferences:
-                    self.concat_file(
-                        contents=plistlib.dumps(plist),
-                        path=f"{HOME_PREFIX}{app_pref}",
-                        files_to_restore=files_to_restore,
-                        owner=501, group=501
-                    )
-            # iOS 27+: Also write .GlobalPreferences.plist to HomeDomain so
-            # tweaks that depend on it survive the Phase 3 protective backup restore.
-            # ManagedPreferencesDomain is the primary location; HomeDomain is a
-            # secondary copy for iOS 27 compatibility. (Phase 3 skips this file
-            # to avoid overwriting the tweak copy.)
-            home_plist = basic_plists.get(FileLocation.globalPreferences, {})
-            if FileLocation.globalPreferencesHomeDomain.value in community_plists:
-                home_plist = {**community_plists.pop(FileLocation.globalPreferencesHomeDomain.value)[0],
-                              **home_plist}
-            self.concat_file(
-                contents=plistlib.dumps(home_plist),
-                path=FileLocation.globalPreferencesHomeDomain.value,
-                files_to_restore=files_to_restore,
-                owner=501, group=501
-            )
-
-            for location, data in files_data.items():
-                self.concat_file(
-                    contents=data,
-                    path=location.value,
-                    files_to_restore=files_to_restore,
-                    owner=501, group=501
-                )
-
-            self._add_community_files(community_plists, community_files, files_to_restore, is_ios27)
-
             # Check if backup encryption is enabled and handle it
             backup_password = ""
             if Version(self.get_current_device_version()) >= Version("27.0"):
@@ -1433,13 +1291,7 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                 organization_name=self.pref_manager.organization_name)
             return final_alert, files_to_restore
         finally:
-            if len(tmp_dirs) > 0:
-                for tmp_dir in tmp_dirs:
-                    try:
-                        tmp_dir.cleanup()
-                    except Exception as e:
-                        # ignore clean up errors
-                        print(str(e))
+            artifacts.close()
 
     def _add_community_files(self, plists: dict, files: dict,
                              files_to_restore: list[FileToRestore], is_ios27: bool):
@@ -1486,6 +1338,19 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
             # plain if-chains, not match: the page set is a long, stable list
             # and a flat chain keeps the diff readable when pages are added
             for page in reset_pages:
+                section = {
+                    Page.Springboard: Section.SPRINGBOARD,
+                    Page.InternalOptions: Section.INTERNAL,
+                    Page.LiquidGlass: Section.LIQUID_GLASS,
+                }.get(page)
+                if section is not None:
+                    # Derive plist coverage from the same registry as apply.
+                    # Opaque payloads (e.g. Siri AI's keyed archive) have their
+                    # own reset flow and must never receive an empty plist.
+                    files_to_null.extend(
+                        spec.location.value for spec in SPECS
+                        if spec.section == section and spec.location.value.endswith(".plist")
+                    )
                 if page == Page.StatusBar:
                     ## STATUS BAR
                     dev_version = self.get_current_device_version()
@@ -1556,25 +1421,19 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                     files_to_null.append(FileLocation.accessibility.value)
 
             # add the files to null from the list
-            is_ios27 = bool(dev_version) and Version(dev_version) >= Version("27.0")
-            for file_path in files_to_null:
-                if is_ios27:
-                    # Restore a valid empty plist instead of a zero-byte
-                    # file: on iOS 26.2+ a truncated plist (e.g. an empty
-                    # com.apple.springboard.plist) makes SpringBoard crash
-                    # at boot, which sends the device into a boot loop. An
-                    # empty dict parses fine and makes the system fall back
-                    # to its default values.
-                    contents = plistlib.dumps({})
-                else:
-                    # iOS 26: reset matches the original Nugget, which writes
-                    # empty (zero-byte) files without any capture.
-                    contents = b""
+            written_paths = set()
+            for file_path in dict.fromkeys(files_to_null):
+                if file_path in written_paths:
+                    continue
+                # All supported versions (26.2+) need parseable empty plists.
+                # A zero-byte SpringBoard preference file can crash at boot.
+                contents = plistlib.dumps({})
                 self.concat_file(
                     contents=contents,
                     path=file_path,
                     files_to_restore=files_to_restore
                 )
+                written_paths.add(file_path)
                 # mcxd copies every managed preference into the target app's
                 # own cfprefs domain on disk, so an applied tweak is visible in
                 # TWO files: the /var/Managed Preferences plist Nugget owns and
@@ -1583,17 +1442,17 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                 # it any more -- and the Phase 3 protective restore used to
                 # hand that stale mirror straight back (this is what kept the
                 # Dynamic Island hidden after a reset). Clear both copies.
-                # iOS 27 only: on 26 the reset is a single sparse restore with
-                # no protective restore to undo it, and a zero-byte app plist
-                # is exactly the boot-loop input the branch above avoids.
+                # The mirror can retain these values on every supported OS,
+                # regardless of how the reset is delivered.
                 app_pref = managed_pref_target(file_path)
-                if app_pref is not None and is_ios27:
+                if app_pref is not None and f"{HOME_PREFIX}{app_pref}" not in written_paths:
                     self.concat_file(
                         contents=contents,
                         path=f"{HOME_PREFIX}{app_pref}",
                         files_to_restore=files_to_restore,
                         owner=501, group=501
                     )
+                    written_paths.add(f"{HOME_PREFIX}{app_pref}")
 
             await self.add_skip_setup(files_to_restore, uses_domains)
 

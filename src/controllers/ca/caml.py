@@ -51,8 +51,7 @@ def _top_level_child(el: ET.Element, name: str) -> Optional[ET.Element]:
     hang directly off ``CALayer`` rather than off the ``caml`` root, so plain
     child lookups miss them.
     """
-    hits = [c for c in el.iter() if _local(c.tag) == name]
-    return hits[0] if hits else None
+    return next((c for c in el.iter() if _local(c.tag) == name), None)
 
 
 def _attr(el: ET.Element, name: str) -> Optional[str]:
@@ -693,7 +692,9 @@ def _parse_ca_layer(el: ET.Element) -> Layer:
 # Top-level document parsing
 # --------------------------------------------------------------------------- #
 
-def _parse_xml(xml: str) -> Optional[ET.Element]:
+def _parse_xml(xml: str | ET.Element) -> Optional[ET.Element]:
+    if isinstance(xml, ET.Element):
+        return xml
     try:
         return ET.fromstring(xml)
     except ET.ParseError:
@@ -881,13 +882,17 @@ def parse_caml(xml: str) -> Optional[Layer]:
 
 
 def parse_ca_document(xml: str) -> Optional[CADocument]:
-    root = parse_caml(xml)
+    # All readers share one parsed tree, including namespaced wrappers.
+    caml = _get_caml_root(xml)
+    if caml is None:
+        return None
+    root = parse_caml(caml)
     if root is None:
         return None
     doc = CADocument()
     doc.root = root
-    doc.states = parse_states(xml)
-    doc.stateOverrides = parse_state_overrides(xml)
-    doc.stateTransitions = parse_state_transitions(xml)
-    doc.parallax = parse_wallpaper_parallax_groups(xml)
+    doc.states = parse_states(caml)
+    doc.stateOverrides = parse_state_overrides(caml)
+    doc.stateTransitions = parse_state_transitions(caml)
+    doc.parallax = parse_wallpaper_parallax_groups(caml)
     return doc

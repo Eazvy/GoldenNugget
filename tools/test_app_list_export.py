@@ -158,14 +158,20 @@ async def main():
     check("export button enabled after data", dlg.export_btn.isEnabled())
 
     dlg.filter_input.setText("instagram")
-    check("filter narrows list", dlg.list_widget.count() == 1)
+    # The search is debounced; hidden rows remain allocated so their icons and
+    # item objects can be reused when the query changes.
+    dlg._apply_filter()
+    visible = lambda: [dlg.list_widget.item(i) for i in range(dlg.list_widget.count())
+                       if not dlg.list_widget.item(i).isHidden()]
+    check("filter narrows list", len(visible()) == 1)
     dlg._on_current_changed(dlg.list_widget.currentItem(), None)
     sel = dlg.selected_app()
     check("selection carries the app dict",
           sel is not None and sel["bundle_id"] == "com.instagram.instagram")
 
     dlg.filter_input.setText("zzz-nothing")
-    check("no-match filter empties the list", dlg.list_widget.count() == 0)
+    dlg._apply_filter()
+    check("no-match filter empties the list", len(visible()) == 0)
     dlg.filter_input.setText("")
 
     print(f"ALL APP-LIST CHECKS PASSED ({PASS} checks)", flush=True)

@@ -161,6 +161,14 @@ class ShareCodes(unittest.TestCase):
         self.assertEqual(decoded['shared_count'], 1)
         self.assertNotIn('NotATweak', decoded['tweaks'])
 
+    def test_truncated_compressed_code_is_rejected_even_if_json_is_intact(self):
+        raw = json.dumps({'v': 1, 't': {'RTL': ON}}).encode()
+        # The final four bytes are zlib's checksum, after the JSON payload.
+        compressed = zlib.compress(raw)[:-4]
+        code = share_code.PREFIX + base64.urlsafe_b64encode(compressed).decode().rstrip('=')
+        with self.assertRaises(share_code.ShareCodeError):
+            share_code.decode(code)
+
     def test_qr_roundtrip(self):
         code = share_code.encode({'RTL': ON, 'SBBuildNumber': ON}, 'QR')
         self.assertEqual(share_code.read_qr_array(share_code.qr_image(code)), code)

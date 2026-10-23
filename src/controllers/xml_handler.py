@@ -1,3 +1,5 @@
+from typing import Any
+from .patch_session import current_patch_session
 import ast
 import math
 import operator
@@ -45,12 +47,15 @@ def parse_equation(eq: str, val: str):
         results.append(str(evaluate(parsed.body)))
     return ' '.join(results)
 
-def set_xml_value(file: str, id: str, key: str, val: any, use_ca_id: bool = False):
+def set_xml_value(file: str, id: str, key: str, val: Any, use_ca_id: bool = False):
     set_xml_values(file=file, id=id, keys=[key], values=[val], use_ca_id=use_ca_id)
 
-def set_xml_values(file: str, id: str, keys: list[str], values: list[any], use_ca_id: bool = False):
-    xml = tree.parse(file)
+def set_xml_values(file: str, id: str, keys: list[str], values: list[Any], use_ca_id: bool = False):
+    session = current_patch_session()
+    xml = session.xml(file) if session is not None else tree.parse(file)
     root = xml.getroot()
+    # Do not mutate the caller's values while normalizing for XML.
+    values = [int(value) if isinstance(value, bool) else value for value in values]
 
     # convert bool to integer
     for i in range(len(values)):
@@ -81,8 +86,9 @@ def set_xml_values(file: str, id: str, keys: list[str], values: list[any], use_c
                 set_val = values[i]
                 to_change.set(keys[i], set_val)
 
-    # write back to file
-    xml.write(file, encoding="UTF-8", xml_declaration=True)
+    # Batched callers commit only after all ordered edits succeed.
+    if session is None:
+        xml.write(file, encoding="UTF-8", xml_declaration=True)
 
 def remove_from_root(root, search):
     for parent in root.findall(search + "/.."):

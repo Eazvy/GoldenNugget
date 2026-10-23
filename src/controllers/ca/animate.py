@@ -9,6 +9,9 @@ exactly like the TSX ``animationOverrides`` object consumed by the renderer.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from .models import Animation, GradientColor, Size, Vec2
@@ -93,13 +96,14 @@ def _build_key_times(count: int, custom: Optional[List[float]] = None, discrete:
     return [i / (count - 1) for i in range(count)]
 
 
-def _color_channel(hex_color: str) -> List[float]:
+@lru_cache(maxsize=256)
+def _color_channel(hex_color: str) -> tuple:
     h = hex_color.strip().lstrip("#")
     if len(h) == 8:
         h = h[:6]
     if len(h) != 6:
-        return [0.0, 0.0, 0.0]
-    return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
+        return (0.0, 0.0, 0.0)
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
 def lerp_color(a: str, b: str, u: float) -> str:
@@ -107,6 +111,29 @@ def lerp_color(a: str, b: str, u: float) -> str:
     cb = _color_channel(b)
     out = [round(ca[i] + (cb[i] - ca[i]) * u) for i in range(3)]
     return f"#{out[0]:02x}{out[1]:02x}{out[2]:02x}"
+
+
+@dataclass(frozen=True)
+class AnimationTrack:
+    key_times: tuple[float, ...]
+    ordered: bool
+
+    @classmethod
+    def compile(cls, count, key_times, discrete):
+        times = tuple(_build_key_times(count, key_times, discrete))
+        return cls(times, all(math.isfinite(value) for value in times)
+                   and all(a <= b for a, b in zip(times, times[1:])))
+
+
+def _animation_track(animation):
+    key = (id(animation.values), len(animation.values), id(animation.keyTimes),
+           animation.calculationMode)
+    cached = getattr(animation, '_prepared_track', None)
+    if cached is None or cached[0] != key:
+        cached = key, AnimationTrack.compile(len(animation.values), animation.keyTimes,
+                                              animation.calculationMode == 'discrete')
+        animation._prepared_track = cached
+    return cached[1]
 
 
 def interpolate_keyframe(
@@ -121,6 +148,7 @@ def interpolate_keyframe(
     calculation_mode: str = "linear",
     timing_function: str = "linear",
     key_times: Optional[List[float]] = None,
+    *, _track: Optional[AnimationTrack] = None,
 ) -> Any:
     if not keyframes:
         return 0
@@ -128,7 +156,8 @@ def interpolate_keyframe(
         return keyframes[0]
 
     is_discrete = calculation_mode == "discrete"
-    forward_key_times = _build_key_times(len(keyframes), key_times, is_discrete)
+    track = _track or AnimationTrack.compile(len(keyframes), key_times, is_discrete)
+    forward_key_times = track.key_times
 
     if current_time < delay_ms:
         return keyframes[0]
@@ -167,16 +196,24 @@ def interpolate_keyframe(
         path_key_times = forward_key_times
 
     if is_discrete:
-        discrete_index = len(path) - 1
-        for i in range(len(path) - 1, -1, -1):
-            if eased_key_time >= path_key_times[i]:
-                discrete_index = i
-                break
+        if track.ordered:
+            discrete_index = bisect_right(path_key_times, eased_key_time) - 1
+            if discrete_index < 0:
+                discrete_index = len(path) - 1  # preserve the legacy pre-first-key fallback
+        else:
+            discrete_index = len(path) - 1
+            for i in range(len(path) - 1, -1, -1):
+                if eased_key_time >= path_key_times[i]:
+                    discrete_index = i
+                    break
         return path[discrete_index]
 
-    seg_index = 0
-    while seg_index < len(path_key_times) - 1 and eased_key_time >= path_key_times[seg_index + 1]:
-        seg_index += 1
+    if track.ordered:
+        seg_index = max(0, bisect_right(path_key_times, eased_key_time) - 1)
+    else:
+        seg_index = 0
+        while seg_index < len(path_key_times) - 1 and eased_key_time >= path_key_times[seg_index + 1]:
+            seg_index += 1
     seg_index = min(seg_index, len(path) - 2)
 
     a = path[seg_index]
@@ -240,6 +277,7 @@ def layer_animation_overrides(
             anim.calculationMode or "linear",
             anim.timingFunction or "linear",
             anim.keyTimes,
+            _track=_animation_track(anim),
         )
         if value is None:
             continue

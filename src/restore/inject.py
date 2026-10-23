@@ -16,6 +16,7 @@ __lazy_modules__ = (
     "sqlite3",
 )
 
+from contextlib import closing
 import hashlib
 import logging
 import os
@@ -24,6 +25,10 @@ import sqlite3
 import time
 from pathlib import Path
 from typing import Optional
+
+from src.utils.payload import install_payload
+from .mbfile import MBFileArchive, InvalidMBFile
+from src.exceptions.nugget_exception import NuggetException
 
 from pymobiledevice3.services.mobilebackup2 import Mobilebackup2Service
 
@@ -34,8 +39,10 @@ def _is_encrypted_backup(device_dir: Path) -> bool:
     """Check if a backup directory has an encrypted Manifest.db."""
     try:
         return Mobilebackup2Service._is_encrypted_backup(device_dir)
-    except Exception:
-        return False
+    except Exception as exc:
+        raise NuggetException(
+            f"Could not determine backup encryption at {device_dir}. "
+            "The backup was not modified.", detailed_text=str(exc)) from exc
 
 
 def _validate_sqlite_db(db_path) -> bool:
@@ -45,16 +52,16 @@ def _validate_sqlite_db(db_path) -> bool:
     if not db_path.exists() or db_path.stat().st_size < 100:
         return False
     try:
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
-        conn.close()
+        with closing(sqlite3.connect(str(db_path))) as conn:
+            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
         return True
     except sqlite3.DatabaseError:
         return False
 
 
 def _build_mbfile_blob(relative_path: str, contents: bytes, mode: int = 33188,
-                       owner: int = 501, group: int = 501) -> bytes:
+                       owner: int = 501, group: int = 501, *,
+                       size=None, digest=None, inode=None, protection_class=None) -> bytes:
     """Build a ``MBFile`` archive blob for an injected backup file.
 
     Matches the NSKeyedArchiver structure BackupAgent2 writes to the
@@ -80,17 +87,21 @@ def _build_mbfile_blob(relative_path: str, contents: bytes, mode: int = 33188,
             "UserID": owner,
             "Mode": mode,
             "ProtectionClass": 4,
-            "Size": len(contents),
+            "Size": len(contents) if size is None else size,
             "RelativePath": plistlib.UID(2),
             "Digest": plistlib.UID(3),
             "ExtendedAttributes": plistlib.UID(4),
             "$class": plistlib.UID(5),
         },
         relative_path,
-        hashlib.sha1(contents).digest(),
+        hashlib.sha1(contents).digest() if digest is None else digest,
         extended_attributes,
         {"$classname": "MBFile", "$classes": ["MBFile", "NSObject"]},
     ]
+    if inode is not None:
+        objects[1]["InodeNumber"] = inode
+    if protection_class is not None:
+        objects[1]["ProtectionClass"] = protection_class
     return plistlib.dumps(
         {
             "$version": 100000,
@@ -104,7 +115,7 @@ def _build_mbfile_blob(relative_path: str, contents: bytes, mode: int = 33188,
 
 def _patch_donor_blob(donor_blob: bytes, relative_path: str, contents: bytes,
                       mode: Optional[int] = None, owner: Optional[int] = None,
-                      group: Optional[int] = None) -> bytes:
+                      group: Optional[int] = None, *, size=None, digest=None, inode=None, protection_class=None) -> bytes:
     """Re-target a real MBFile blob from the same backup for a new payload.
 
     Cloning a row the device itself produced guarantees byte-exact metadata
@@ -112,19 +123,17 @@ def _patch_donor_blob(donor_blob: bytes, relative_path: str, contents: bytes,
     archive the restore agent might reject. Only the path, digest, size and
     (optionally) mode/ownership change.
     """
-    blob = plistlib.loads(donor_blob)
-    objects = blob["$objects"]
-    info = objects[1]
-    objects[info["RelativePath"]] = relative_path
-    objects[info["Digest"]] = hashlib.sha1(contents).digest()
-    info["Size"] = len(contents)
-    if mode is not None:
-        info["Mode"] = mode
-    if owner is not None:
-        info["UserID"] = owner
-    if group is not None:
-        info["GroupID"] = group
-    return plistlib.dumps(blob, fmt=plistlib.FMT_BINARY)
+    template = donor_blob if isinstance(donor_blob, MBFileArchive) else MBFileArchive.decode(donor_blob)
+    blob = template.clone()
+    info = blob.fields
+    blob.set_reference("RelativePath", relative_path)
+    blob.set_reference("Digest", hashlib.sha1(contents).digest() if digest is None else digest)
+    info["Size"] = len(contents) if size is None else size
+    for key, value in (("Mode", mode), ("UserID", owner), ("GroupID", group),
+                       ("InodeNumber", inode), ("ProtectionClass", protection_class)):
+        if value is not None:
+            info[key] = value
+    return blob.encode()
 
 
 def _pick_donor_blob(conn, domain: str, relative_path: str) -> "Optional[bytes]":
@@ -153,7 +162,7 @@ def _pick_donor_blob(conn, domain: str, relative_path: str) -> "Optional[bytes]"
         (domain, relative_path),
     ):
         try:
-            info = plistlib.loads(candidate_blob)["$objects"][1]
+            info = MBFileArchive.decode(candidate_blob).fields
             if (info.get("Mode", 0) & 0o777) == 0o644 and isinstance(
                 info.get("InodeNumber"), int
             ):
@@ -167,7 +176,7 @@ def _pick_donor_blob(conn, domain: str, relative_path: str) -> "Optional[bytes]"
         (domain, relative_path),
     ):
         try:
-            info = plistlib.loads(candidate_blob)["$objects"][1]
+            info = MBFileArchive.decode(candidate_blob).fields
             if "Digest" in info and "ExtendedAttributes" in info:
                 return candidate_blob
         except Exception:
@@ -284,23 +293,21 @@ def _ensure_directory_rows(conn, domain: str, relative_dir: str,
                 continue
         next_inode += 1
         if donor_blob is not None:
-            blob = plistlib.loads(donor_blob)
-            objects = blob["$objects"]
-            info = objects[1]
-            objects[info["RelativePath"]] = rel
+            template = donor_blob if isinstance(donor_blob, MBFileArchive) else MBFileArchive.decode(donor_blob)
+            metadata = template.clone()
+            metadata.set_reference("RelativePath", rel)
         else:
-            blob = plistlib.loads(_build_mbdir_blob(rel))
-            objects = blob["$objects"]
-        objects[1]["InodeNumber"] = next_inode
+            metadata = MBFileArchive.decode(_build_mbdir_blob(rel))
+        info = metadata.fields
+        info["InodeNumber"] = next_inode
         if domain == "SysContainerDomain-com.apple.eligibilityd":
-            # Project Linwood's verified system-container directory row shape.
-            objects[1]["ProtectionClass"] = 0
-            objects[1]["Mode"] = 0o40755
+            info["ProtectionClass"] = 0
+            info["Mode"] = 0o40755
         if owner is not None:
-            objects[1]["UserID"] = owner
+            info["UserID"] = owner
         if group is not None:
-            objects[1]["GroupID"] = group
-        blob = plistlib.dumps(blob, fmt=plistlib.FMT_BINARY)
+            info["GroupID"] = group
+        blob = metadata.encode()
         dir_id = hashlib.sha1(f"{domain}-{rel}".encode("utf-8")).hexdigest()
         conn.execute(
             "INSERT OR REPLACE INTO Files (fileID, domain, relativePath, flags, file) "
@@ -319,16 +326,20 @@ def _max_inode_in_manifest(conn) -> int:
         "SELECT file FROM Files WHERE flags IN (1, 2) AND file IS NOT NULL"
     ):
         try:
-            ino = plistlib.loads(candidate_blob)["$objects"][1].get("InodeNumber")
-            if isinstance(ino, int):
+            ino = MBFileArchive.decode(candidate_blob).fields.get("InodeNumber")
+            if ino is not None:
+                if type(ino) is not int or ino < 0:
+                    raise InvalidMBFile("InodeNumber must be a nonnegative integer")
                 max_inode = max(max_inode, ino)
-        except Exception:
-            continue
+        except InvalidMBFile as exc:
+            raise NuggetException(
+                "The backup contains unreadable file metadata. Injection stopped.",
+                detailed_text=str(exc)) from exc
     return max_inode
 
 
 def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
-                             manifest_password: str = ""):
+                             manifest_password: str = "", *, max_inode_hint=None):
     """Add many files to a pruned backup in a single Manifest.db transaction.
 
     The iOS 27 "safe state recovery" wipe clears HomeDomain files that were
@@ -347,7 +358,9 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
     Phase 1 quadratic for large tweak payloads.
 
     ``files`` is a list of ``(domain, relative_path, contents, mode, owner,
-    group)`` tuples. The iOS 27 restore agent requires a well-formed
+    group)`` tuples; contents may be bytes or a Path and is streamed in bounded
+    buffers. ``max_inode_hint`` is accepted only from the immediately preceding
+    prune of this same manifest, before any other writer can change it. The iOS 27 restore agent requires a well-formed
     regular-file blob with a real, *unique* inode (it deduplicates by inode —
     a clone sharing the donor's inode gets restored with the donor's content,
     and a fresh blob without an inode is skipped outright). The mode is
@@ -396,13 +409,13 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
         #   donor_cache  - per-domain donor blob (the device's own row format)
         #   known_dirs   - directory rows already present / inserted
         #   dir_donor    - one real directory blob reused for dir rows
-        next_inode = _max_inode_in_manifest(conn)
+        next_inode = _max_inode_in_manifest(conn) if max_inode_hint is None else max_inode_hint
         donor_cache: dict = {}
         known_dirs: set = set()
         dir_donor = conn.execute(
             "SELECT file FROM Files WHERE flags = 2 AND file IS NOT NULL LIMIT 1"
         ).fetchone()
-        dir_donor = dir_donor[0] if dir_donor else None
+        dir_donor = MBFileArchive.decode(dir_donor[0]) if dir_donor else None
         for domain, relative_path, contents, mode, owner, group in files:
             file_id = hashlib.sha1(f"{domain}-{relative_path}".encode("utf-8")).hexdigest()
 
@@ -416,10 +429,10 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
             # The restore agent validates the blob and deduplicates by inode:
             # pick a donor the agent accepts, then stamp a unique inode so the
             # restored file cannot be confused with the donor's own file.
-            donor = donor_cache.get(domain)
-            if donor is None:
-                donor = _pick_donor_blob(conn, domain, relative_path)
-                donor_cache[domain] = donor
+            if domain not in donor_cache:
+                donor_bytes = _pick_donor_blob(conn, domain, relative_path)
+                donor_cache[domain] = MBFileArchive.decode(donor_bytes) if donor_bytes else None
+            donor = donor_cache[domain]
             unique_inode = next_inode + 1
             next_inode += 1
             safe_mode = (mode or 33188) & 0o100777
@@ -427,47 +440,27 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
                 safe_mode |= 0o644
             # Ownership is carried verbatim: 0 (root) is a real uid, not a
             # missing value — see _owned().
+            payload = device_dir / file_id[:2] / file_id
+            size, digest, changed = install_payload(contents, payload)
             if donor is None:
                 blob = _build_mbfile_blob(
                     relative_path, contents,
-                    mode=safe_mode, owner=_owned(owner), group=_owned(group))
+                    mode=safe_mode, owner=_owned(owner), group=_owned(group),
+                    size=size, digest=digest, inode=unique_inode,
+                    protection_class=4 if domain == "SysContainerDomain-com.apple.eligibilityd" else None)
             else:
                 blob = _patch_donor_blob(
                     donor, relative_path, contents,
-                    mode=safe_mode, owner=_owned(owner), group=_owned(group))
-            patched = plistlib.loads(blob)
-            patched["$objects"][1]["InodeNumber"] = unique_inode
-            if domain == "SysContainerDomain-com.apple.eligibilityd":
-                patched["$objects"][1]["ProtectionClass"] = 4
-            blob = plistlib.dumps(patched, fmt=plistlib.FMT_BINARY)
-            payload = device_dir / file_id[:2] / file_id
-            payload.parent.mkdir(parents=True, exist_ok=True)
-            # The working copy hardlinks payloads back to the cache master;
-            # writing through such a link would overwrite the master's pristine
-            # payload with tweaked content and corrupt every later apply. Break
-            # the link before writing — but only when the bytes actually differ;
-            # an identical payload is left alone entirely.
-            if payload.is_file() and not payload.is_symlink():
-                try:
-                    if payload.read_bytes() == contents:
-                        unchanged += 1
-                        conn.execute(
-                            "INSERT OR REPLACE INTO Files (fileID, domain, relativePath, flags, file) "
-                            "VALUES (?, ?, ?, ?, ?)",
-                            (file_id, domain, relative_path, 1, sqlite3.Binary(blob)),
-                        )
-                        continue
-                except OSError:
-                    pass
-            if payload.exists() or payload.is_symlink():
-                payload.unlink(missing_ok=True)
-            payload.write_bytes(contents)
+                    mode=safe_mode, owner=_owned(owner), group=_owned(group),
+                    size=size, digest=digest, inode=unique_inode,
+                    protection_class=4 if domain == "SysContainerDomain-com.apple.eligibilityd" else None)
             conn.execute(
                 "INSERT OR REPLACE INTO Files (fileID, domain, relativePath, flags, file) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (file_id, domain, relative_path, 1, sqlite3.Binary(blob)),
             )
-            injected += 1
+            injected += int(changed)
+            unchanged += int(not changed)
         conn.commit()
     finally:
         conn.close()

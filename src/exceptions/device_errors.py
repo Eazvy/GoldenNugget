@@ -1,6 +1,7 @@
 """Shared error classification for device backup/restore operations."""
 import asyncio
 import plistlib
+import re
 
 import pymobiledevice3.exceptions as pm3_exc
 
@@ -26,8 +27,13 @@ def is_find_my_error(exc: BaseException) -> bool:
 
 def is_device_locked_error(exc: Exception) -> bool:
     """Check if an exception indicates the device is locked (ErrorCode 208)."""
+    if is_device_lock_required_error(exc):
+        return True
     msg = str(exc)
-    return "ErrorCode" in msg and ("208" in msg or "Device locked" in msg or "MBErrorDomain" in msg)
+    return bool(re.search(
+        r"\bdevice\s+(?:is\s+)?locked\b|\bMBErrorDomain\s*/\s*208\b|"
+        r"\bErrorCode\b[\"']?\s*(?:[:=]\s*|>\s*|\s+)208\b",
+        msg, re.IGNORECASE))
 
 
 def is_connection_error(exc: Exception) -> bool:

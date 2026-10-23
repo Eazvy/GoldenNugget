@@ -28,6 +28,7 @@ import sys
 import time
 import tempfile
 from types import SimpleNamespace
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -370,28 +371,42 @@ def test_pre_apply_gate():
 
 # =============================================================================
 def test_restore_call_sites():
-    print("\nrestore/worker call sites no longer fail silently")
-    src = inspect.getsource(restore_mod)
-    check("prune gate uses the marker, not a directory listing",
-          "exclude_afc_media_trees=media_store_verified(media_dir)" in src)
-    check("Phase 5 raises on a missing/empty media store",
-          "is missing or empty" in src)
-    check("Phase 5 raises when some files failed to push",
-          "AFC media restore failed for" in src)
-    check("Phase 5 logs what it is about to push",
-          "describe_media_store(media_dir)" in src)
-    check("Phase 5 waits a locked device out instead of dying on it",
-          "open_afc_for_media" in inspect.getsource(afc_media)
-          and "unlock_prompt=" in src)
-    check("Phase 5 offers Abort/Resume for the locked-device wait",
-          "Device stayed locked" in src and "prompt_choice=prompt_choice" in src)
-
-    worker = inspect.getsource(
-        sys.modules["src.gui.thread_workers.apply_worker"])
-    check("apply_worker prunes with the verified marker",
-          "media_has_content = media_store_verified(media_dir)" in worker)
-    check("apply_worker aborts on a failed media push",
-          "AFC media restore failed for" in worker)
+    print("\nshared restore preparation and Phase 5 fail closed")
+    from unittest.mock import Mock, patch
+    from src.restore.recovery import RecoverySource, RecoveryBackend, prepare_recovery
+    from src.restore.context import RestoreSession, RestoreOptions
+    from src.restore.verification import PruneResult
+    good = store("shared_gate")
+    write_file(os.path.join(good, "DCIM", "photo.jpg"), b"photo")
+    _write_media_state(good, 1, 5, 0)
+    for root, expected in ((good, True), (store("partial_gate"), False)):
+        prune = Mock(return_value=PruneResult())
+        asyncio.run(prepare_recovery(
+            RecoverySource("backup", "device", media_dir=root),
+            RecoveryBackend(prune, lambda *args: [], media_store_verified)))
+        check("shared prune requires a freshly verified marker",
+              prune.call_args.kwargs["exclude_afc_media_trees"] is expected)
+    client = SimpleNamespace(close=AsyncMock())
+    options = RestoreOptions(skip_setup=False)
+    try:
+        asyncio.run(restore_mod._finish_restore_phases(
+            RestoreSession(client, True), "device", store("absent_media"), lambda value: None, options))
+    except NuggetException as exc:
+        check("Phase 5 raises on a missing media store", "missing or empty" in str(exc))
+    else:
+        check("Phase 5 raises on a missing media store", False)
+    push = AsyncMock(return_value={"files": 1, "failed": ["DCIM/photo.jpg"]})
+    with patch.object(restore_mod, "restore_media_via_afc", push):
+        try:
+            asyncio.run(restore_mod._finish_restore_phases(
+                RestoreSession(client, True), "device", good, lambda value: None, options))
+        except NuggetException:
+            check("Phase 5 aborts on a failed media push", True)
+        else:
+            check("Phase 5 aborts on a failed media push", False)
+    check("normal Phase 5 requests the current verified set", push.call_args.kwargs["include_historical"] is False)
+    check("Phase 5 provides Abort/Resume callbacks to the AFC wait",
+          "prompt_choice" in push.call_args.kwargs and "unlock_prompt" in push.call_args.kwargs)
 
 
 # =============================================================================
@@ -448,9 +463,13 @@ def test_afc_open_retry():
     def always_fails(exc):
         return lambda: FakeAfc(fail_times=1, exc=exc)
 
-    original_connect = afc_media.create_using_usbmux
+    original_connect = afc_media.lockdown_session
     client = SimpleNamespace(identifier="UDID", close=AsyncMock())
-    afc_media.create_using_usbmux = AsyncMock(return_value=client)
+    @asynccontextmanager
+    async def retry_session(**kwargs):
+        yield client
+
+    afc_media.lockdown_session = retry_session
     real_sleep, real_monotonic = asyncio.sleep, time.monotonic
 
     async def no_sleep(_):
@@ -574,7 +593,7 @@ def test_afc_open_retry():
               got is not None and got is made[-1])
         check("Resume was asked exactly once", len(seen) == 1, f"{len(seen)} prompts")
     finally:
-        afc_media.create_using_usbmux = original_connect
+        afc_media.lockdown_session = original_connect
         afc_media.asyncio.sleep = real_sleep
         afc_media.time.monotonic = real_monotonic
         afc_media.AfcService = _REAL_AFC_SERVICE

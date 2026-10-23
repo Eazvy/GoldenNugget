@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 from collections import OrderedDict
 import copy as _copy
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -39,6 +39,9 @@ from PySide6.QtGui import (
 from src.controllers.tendie_preview import decode_image_bytes
 from .animate import layer_animation_overrides, scene_loop_duration
 from .models import CADocument, GradientColor, Layer, Vec2
+
+if TYPE_CHECKING:
+    import numpy as np
 
 _QM = QPainter.CompositionMode
 
@@ -66,6 +69,8 @@ _HSL_KINDS: Dict[str, str] = {
 }
 
 _MAX_VIDEO_FRAMES = 32
+_MAX_IMAGE_BYTES = 64 * 1024 * 1024
+_MAX_IMAGE_ENTRIES = 128
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -123,22 +128,45 @@ def resolve_state_name(overrides: Optional[dict], state: Optional[str], default:
     return default or state
 
 
+def _layer_index(root):
+    index = {}
+    stack = [root] if root is not None else []
+    while stack:
+        layer = stack.pop()
+        index.setdefault(layer.id, layer)
+        stack.extend(reversed(layer.children))
+    return index
+
+
+def _static_layer_ids(root):
+    static = set()
+    def inspect(layer):
+        children_static = [inspect(child) for child in layer.children]
+        if not layer.animations and layer.type not in ("emitter", "video") and all(children_static):
+            static.add(id(layer))
+            return True
+        return False
+    if root is not None:
+        inspect(root)
+    return static
+
+
 def apply_state_overrides(root: Layer, overrides: Optional[dict], state: Optional[str]) -> Layer:
-    """Deep-copy ``root`` and apply per-state overrides (port of applyOverrides)."""
-    import copy as _copy
-
-    if not overrides or not state or state == "Base State":
-        return _copy.deepcopy(root)
-
+    """Clone once and resolve override targets in linear time."""
     clone = _copy.deepcopy(root)
+    if not overrides or not state or state == "Base State":
+        return clone
     eff = resolve_state_name(overrides, state)
     listing = overrides.get(eff) or []
-    if (not listing) and len(eff) >= 2 and eff[-6:] in (" Light",):
-        base = eff.rsplit(" ", 1)[0]
-        listing = overrides.get(base) or []
+    if not listing and eff.endswith(" Light"):
+        listing = overrides.get(eff.rsplit(" ", 1)[0]) or []
+    return _apply_override_list(clone, _layer_index(clone), listing)
+
+
+def _apply_override_list(clone, index, listing):
     for o in listing:
         target_id = (str(o.get("targetId") or "")).strip()
-        target = find_by_id(clone, target_id) or find_by_id(clone, o.get("targetId"))
+        target = index.get(target_id) or index.get(o.get("targetId"))
         if target is None:
             continue
         kp = (str(o.get("keyPath") or "")).lower()
@@ -184,6 +212,7 @@ def interpolated_state_root(
     from_state: str,
     to_state: str,
     progress: float,
+    *, working_root=None, index=None,
 ) -> Layer:
     """Build a layer tree with state overrides interpolated between two states.
 
@@ -194,7 +223,7 @@ def interpolated_state_root(
     transition.
     """
     if not overrides:
-        return _copy.deepcopy(root)
+        return working_root if working_root is not None else _copy.deepcopy(root)
     from_list = overrides.get(from_state) or []
     to_list = overrides.get(to_state) or []
     p = max(0.0, min(1.0, float(progress)))
@@ -222,7 +251,10 @@ def interpolated_state_root(
         if (target_id, key_path.lower()) not in from_keys:
             interp.append({"targetId": target_id, "keyPath": key_path,
                            "value": o.get("value")})
-    return apply_state_overrides(root, {"__transition__": interp}, "__transition__")
+    if working_root is None:
+        working_root = _copy.deepcopy(root)
+        index = _layer_index(working_root)
+    return _apply_override_list(working_root, index, interp)
 
 
 def state_transition_spec(doc: Optional[CADocument]) -> Optional[Tuple[str, str, float, float, float]]:
@@ -287,17 +319,25 @@ def home_state(doc: Optional[CADocument]) -> Optional[str]:
         return None
     try:
         base_state = resolve_state_name(doc.stateOverrides, "Locked")
-        base = CAMLRenderer(doc, state=base_state).render(0.0)
-        home = CAMLRenderer(doc, state=mig).render(0.0)
+        root = doc.root
+        width, height = (root.size.w, root.size.h) if root else (390, 844)
+        scale = min(1.0, 256 / max(width, height, 1))
+        size = (max(1, round(width * scale)), max(1, round(height * scale)))
+        key = (id(root), id(doc.stateOverrides), doc.revision, base_state, mig, size)
+        cached = getattr(doc, "_home_state_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        base = CAMLRenderer(doc, size=size, state=base_state).render(0.0)
+        home = CAMLRenderer(doc, size=size, state=mig).render(0.0)
     except Exception:
         return None
     if base is None or base.isNull() or home is None or home.isNull():
         return None
     if base.size() != home.size():
         return mig
-    if bytes(base.bits()) == bytes(home.bits()):
-        return None
-    return mig
+    result = None if base == home else mig
+    doc._home_state_cache = key, result
+    return result
 
 
 def _hex_color(hex_str: Optional[str], alpha: float = 1.0) -> Optional[QColor]:
@@ -363,7 +403,8 @@ def _apply_filters(img: QImage, filters) -> QImage:
         src = src.convertToFormat(_QI.Format.Format_RGBA8888)
     w = src.width()
     h = src.height()
-    arr = np.frombuffer(src.constBits(), np.uint8).reshape((h, w, 4))
+    arr = np.ndarray((h, w, 4), dtype=np.uint8, buffer=src.constBits(),
+                     strides=(src.bytesPerLine(), 4, 1))
 
     for flt in active:
         ft = flt.type
@@ -371,17 +412,17 @@ def _apply_filters(img: QImage, filters) -> QImage:
         try:
             if ft == "gaussianBlur":
                 from PIL import Image, ImageFilter
-                pil = Image.fromarray(arr.copy(), "RGBA")
+                pil = Image.fromarray(arr, "RGBA")
                 pil = pil.filter(ImageFilter.GaussianBlur(radius=max(0.0, value)))
                 arr = np.asarray(pil)
             elif ft == "colorContrast":
                 from PIL import Image, ImageEnhance
-                pil = Image.fromarray(arr.copy(), "RGBA")
+                pil = Image.fromarray(arr, "RGBA")
                 pil = ImageEnhance.Contrast(pil).enhance(max(0.0, value))
                 arr = np.asarray(pil)
             elif ft == "colorSaturate":
                 from PIL import Image, ImageEnhance
-                pil = Image.fromarray(arr.copy(), "RGBA")
+                pil = Image.fromarray(arr, "RGBA")
                 pil = ImageEnhance.Color(pil).enhance(max(0.0, value))
                 arr = np.asarray(pil)
             elif ft == "colorInvert":
@@ -394,12 +435,12 @@ def _apply_filters(img: QImage, filters) -> QImage:
                 arr = out
             elif ft == "colorHueRotate":
                 from PIL import Image
-                pil = Image.fromarray(arr.copy(), "RGBA")
+                pil = Image.fromarray(arr, "RGBA")
                 pil = _hue_rotate_pil(pil, value, np)
                 arr = np.asarray(pil)
             elif ft == "CISepiaTone":
                 from PIL import Image
-                pil = Image.fromarray(arr.copy(), "RGBA")
+                pil = Image.fromarray(arr, "RGBA")
                 pil = _sepia_pil(pil, value, np)
                 arr = np.asarray(pil)
         except Exception:
@@ -474,65 +515,31 @@ def _sepia_pil(pil, factor: float, np):
     return _I.fromarray(np.concatenate([out, alpha], axis=-1).astype(np.uint8), "RGBA")
 
 
-def _rgb_to_hsl(rgb: "np.ndarray") -> "np.ndarray":
-    import numpy as np
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    h, delta = _rgb_hue_delta(r, g, b, np)
-    mx = np.maximum(np.maximum(r, g), b)
-    mn = np.minimum(np.minimum(r, g), b)
-    light = (mx + mn) / 2.0
-    denom = np.where((light == 0) | (light == 1), np.full_like(light, 1e-6), 1.0 - np.abs(2.0 * light - 1.0))
-    s = np.where(delta > 0, delta / denom, 0.0)
-    return np.stack([h, s, light], axis=-1)
 
 
-def _hsl_to_rgb_hsl(h: float, s: float, l: float) -> "np.ndarray":
-    import numpy as np
-    c = (1.0 - np.abs(2.0 * l - 1.0)) * s
-    hx = np.mod(h / 60.0, 6.0)
-    x = c * (1.0 - np.abs(np.mod(hx, 2.0) - 1.0))
-    m = l - c / 2.0
-    z = np.zeros_like(c)
-    r = np.where(hx < 1, c, np.where(hx < 2, x, np.where(hx < 3, z, np.where(hx < 4, z, np.where(hx < 5, x, c)))))
-    g = np.where(hx < 1, x, np.where(hx < 2, c, np.where(hx < 3, c, np.where(hx < 4, z, np.where(hx < 5, z, c)))))
-    b = np.where(hx < 1, z, np.where(hx < 2, z, np.where(hx < 3, x, np.where(hx < 4, c, np.where(hx < 5, c, z)))))
-    out = np.stack([r + m, g + m, b + m], axis=-1)
-    return out.astype(np.float32, copy=False)
 
 
 def _hsl_blend(src: QImage, kind: str) -> QImage:
-    """HSL-family blend on an offscreen layer is approximated as a replace of
-    the layer's own pixels (a preview approximation -- the four CSS blend ids
-    map through this path only when Qt cannot natively produce them)."""
-    try:
-        import numpy as np
-        from PIL import Image
-        import io
-    except Exception:
-        return src
-    from PySide6.QtCore import QBuffer, QByteArray
+    """Preserve the preview's existing HSL approximation without a codec roundtrip.
 
-    buf = QBuffer()
-    buf.setData(QByteArray())
-    buf.open(QBuffer.OpenModeFlag.WriteOnly)
-    src.save(buf, "PNG")
-    buf.close()
-    try:
-        pil = Image.open(io.BytesIO(bytes(buf.data()))).convert("RGBA")
-    except Exception:
+    The old RGB -> HSL -> identical RGB conversion was an identity; its only
+    net operation was compositing the original RGB onto an opaque backdrop.
+    Convert to straight RGBA *before* dropping alpha, so translucent colors
+    retain their RGB rather than their premultiplied values.
+    """
+    if src.isNull():
         return src
-    arr = np.asarray(pil).astype(np.float32) / 255.0
-    alpha = arr[..., 3:4]
-    rgb = arr[..., :3]
-    hsl = _rgb_to_hsl(rgb)
-    rgb_out = _hsl_to_rgb_hsl(hsl[..., 0], hsl[..., 1], hsl[..., 2])
-    rgb_out = np.clip(rgb_out, 0.0, 1.0)
-    back_alpha = 1.0
-    out_rgb = rgb_out * alpha + rgb * (1.0 - alpha)
-    out_alpha = alpha + back_alpha * (1.0 - alpha)
-    final = np.clip(np.concatenate([out_rgb, out_alpha[..., :1]], axis=-1), 0.0, 1.0)
-    buf2 = np.ascontiguousarray((final * 255.0).astype(np.uint8))
-    return QImage(buf2.data, final.shape[1], final.shape[0], 4 * final.shape[1], QImage.Format.Format_RGBA8888).copy()
+    out = src.convertToFormat(QImage.Format.Format_RGBA8888).copy()
+    bits = out.bits()
+    stride, width = out.bytesPerLine(), out.width()
+    if stride == width * 4:
+        bits[3::4] = b"\xff" * (width * out.height())
+    else:
+        alpha = b"\xff" * width
+        for row in range(out.height()):
+            start = row * stride
+            bits[start + 3:start + width * 4:4] = alpha
+    return out
 
 
 class CAMLRenderer:
@@ -560,10 +567,20 @@ class CAMLRenderer:
             self.backdrop = root.backgroundColor if root else None
         else:
             self.backdrop = None
-        self._images: Dict[str, Optional[QImage]] = {}
+        self._images = OrderedDict()
+        self._image_bytes = 0
+        self._document_revision = doc.revision
+        self._default_size = size is None
+        self._default_backdrop = backdrop is None and backdrop_fill
         self._video_frames = OrderedDict()
         self._state_root: Optional[Layer] = None
         self._state_root_id: Optional[object] = None
+        self._static_layers = set()
+        self._offscreen_cache = OrderedDict()
+        self._offscreen_bytes = 0
+        self._transition_key = None
+        self._transition_root = None
+        self._transition_index = None
         self._emitter_particles: Dict[str, List[Tuple[float, float, float, float, float]]] = {}
 
     # -- asset access ------------------------------------------------------ #
@@ -583,24 +600,63 @@ class CAMLRenderer:
             pass
         for key in keys:
             if key in self._images:
+                self._images.move_to_end(key)
                 return self._images[key]
             data = self.doc.assets.get(key)
             if data:
                 img = decode_image_bytes(data)
                 if img is not None and not img.isNull():
-                    self._images[key] = img
+                    self._cache_image(key, img)
                     return img
-                self._images[key] = None
+                self._cache_image(key, None)
         return None
+
+    def _cache_image(self, key, image):
+        cost = image.sizeInBytes() if image is not None else 0
+        if cost > _MAX_IMAGE_BYTES:
+            return
+        while self._images and (self._image_bytes + cost > _MAX_IMAGE_BYTES
+                                or len(self._images) >= _MAX_IMAGE_ENTRIES):
+            _, previous = self._images.popitem(last=False)
+            self._image_bytes -= previous.sizeInBytes() if previous is not None else 0
+        self._images[key] = image
+        self._image_bytes += cost
+
+    def _sync_document(self):
+        if self._document_revision == self.doc.revision:
+            return
+        self._document_revision = self.doc.revision
+        root = self.doc.root
+        self.scene_w = root.size.w if root else 390.0
+        self.scene_h = root.size.h if root else 844.0
+        self.scene_flipped = int(root.geometryFlipped or 0) if root else 0
+        if self._default_size:
+            self.width, self.height = int(self.scene_w), int(self.scene_h)
+        self._render_edge = max(self.width, self.height)
+        if self._default_backdrop:
+            self.backdrop = root.backgroundColor if root else None
+        self._images.clear()
+        self._image_bytes = 0
+        self._video_frames.clear()
+        self._state_root = self._state_root_id = None
+        self._transition_key = self._transition_root = self._transition_index = None
+        self._static_layers.clear()
+        self._offscreen_cache.clear()
+        self._offscreen_bytes = 0
+        self._emitter_particles.clear()
 
     # -- top level --------------------------------------------------------- #
 
     def render(self, t_ms: float = 0.0) -> QImage:
-        key = (self.doc, self.state)
+        self._sync_document()
+        key = (id(self.doc), self.doc.revision, self.state)
         if self._state_root is None or self._state_root_id != key:
             self._state_root = apply_state_overrides(
                 self.doc.root, self.doc.stateOverrides, self.state)
             self._state_root_id = key
+            self._static_layers = _static_layer_ids(self._state_root)
+            self._offscreen_cache.clear()
+            self._offscreen_bytes = 0
         return self._paint_root(self._state_root, t_ms)
 
     def render_state_transition(
@@ -613,8 +669,15 @@ class CAMLRenderer:
         """Render the poster state transition (e.g. chest opening): each
         numeric state override is interpolated ``from_state`` -> ``to_state``
         by ``progress``; non-numeric values snap in at the end."""
+        self._sync_document()
+        key = (id(self.doc.root), id(self.doc.stateOverrides), self.doc.revision, from_state, to_state)
+        if self._transition_key != key:
+            self._transition_root = _copy.deepcopy(self.doc.root)
+            self._transition_index = _layer_index(self._transition_root)
+            self._transition_key = key
         root = interpolated_state_root(
-            self.doc.root, self.doc.stateOverrides, from_state, to_state, progress)
+            self.doc.root, self.doc.stateOverrides, from_state, to_state, progress,
+            working_root=self._transition_root, index=self._transition_index)
         return self._paint_root(root, t_ms)
 
     def _paint_root(self, root: Layer, t_ms: float = 0.0) -> QImage:
@@ -713,19 +776,31 @@ class CAMLRenderer:
                 k = cap / max(off_w, off_h)
                 off_w = max(1, int(off_w * k))
                 off_h = max(1, int(off_h * k))
-            off = QImage(off_w, off_h, QImage.Format.Format_ARGB32_Premultiplied)
-            off.fill(Qt.GlobalColor.transparent)
-            op = QPainter(off)
-            try:
-                if off_w != w or off_h != h:
-                    op.scale(off_w / w, off_h / h)
-                self._paint_layer_content(op, layer, w, h, next_use_y_up, t_ms, delay_ms, bg_color)
-            finally:
-                op.end()
-            if filters:
-                off = _apply_filters(off, filters)
-            if hsl_kind is not None:
-                off = _hsl_blend(off, hsl_kind)
+            cache_key = (id(layer), off_w, off_h, bg_color)
+            off = self._offscreen_cache.get(cache_key) if id(layer) in self._static_layers else None
+            if off is None:
+                off = QImage(off_w, off_h, QImage.Format.Format_ARGB32_Premultiplied)
+                off.fill(Qt.GlobalColor.transparent)
+                op = QPainter(off)
+                try:
+                    if off_w != w or off_h != h:
+                        op.scale(off_w / w, off_h / h)
+                    self._paint_layer_content(op, layer, w, h, next_use_y_up, t_ms, delay_ms, bg_color)
+                finally:
+                    op.end()
+                if filters:
+                    off = _apply_filters(off, filters)
+                if hsl_kind is not None:
+                    off = _hsl_blend(off, hsl_kind)
+                if id(layer) in self._static_layers and off.sizeInBytes() <= 16 * 1024 * 1024:
+                    while self._offscreen_cache and (len(self._offscreen_cache) >= 128 or
+                            self._offscreen_bytes + off.sizeInBytes() > 16 * 1024 * 1024):
+                        _, old = self._offscreen_cache.popitem(last=False)
+                        self._offscreen_bytes -= old.sizeInBytes()
+                    self._offscreen_cache[cache_key] = off
+                    self._offscreen_bytes += off.sizeInBytes()
+            else:
+                self._offscreen_cache.move_to_end(cache_key)
             if blend is not None:
                 p.setCompositionMode(blend)
             if opacity < 0.999:

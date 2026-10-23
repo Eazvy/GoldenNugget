@@ -75,6 +75,8 @@ def current_conflicts(manager):
     from src.controllers.hotload import HotLoad
     from src.tweaks.tweak_loader import load_plist_tweaks, load_daemons
     from src.tweaks.tweaks import tweaks
+    from src.tweaks.store import selection_store
+    tweaks = selection_store(manager, tweaks)
     load_plist_tweaks()
     load_daemons()
     hotload = HotLoad(manager.pref_manager.settings)

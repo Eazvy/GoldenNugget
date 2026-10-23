@@ -22,7 +22,9 @@ override, select Reset Siri AI Overrides and apply. This clears *all* overrides;
 it does not restore a previous map. The ordinary Internal Options preference
 reset does not clear these archives; use the dedicated switch.
 
-Available on iPhones running iOS 27.0, without an individual model restriction.
+Enable is available on iPhone 15 Pro / Pro Max and later iPhone generations
+running any iOS 27.x release. Reset remains available on all iPhones on iOS 27.x
+for recovery. iOS 26 and 28 are excluded.
 Only iPhone 16 Pro (`iPhone17,1`), build 24A437 was reported verified upstream;
 other builds and hardware are not verified by us.
 Siri language must be English (US); complete Siri AI consent in Settings after

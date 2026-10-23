@@ -106,8 +106,13 @@ def main():
           f"{rows.graphicsEffect().opacity():.2f}")
 
     heights = []
-    for _ in range(4):           # ~200ms of the 340ms unfold, sampled as it plays
-        pump(50)
+    animation = rows._group
+    animation.pause()
+    # Advance Qt's real animation clock deterministically. A busy CI host can
+    # overshoot a 50ms wall-clock pump and skip straight to the final frame.
+    for timestamp in (50, 100, 150, 200):
+        animation.setCurrentTime(timestamp)
+        app.processEvents()
         heights.append(rows.maximumHeight())
     check("the fold grows progressively (rows cascade in top down)",
           all(a < b for a, b in zip(heights, heights[1:])),
@@ -115,6 +120,7 @@ def main():
     check("still mid-unroll before it finishes",
           0 < heights[-1] < _NO_MAX_HEIGHT, f"maxHeight={heights[-1]}")
 
+    animation.resume()
     pump()
     check("unfolded to no limit once finished", rows.maximumHeight() == _NO_MAX_HEIGHT,
           f"maxHeight={rows.maximumHeight()}")

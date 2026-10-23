@@ -502,4 +502,5 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
                 monitor_worker.wait(10000)
             except RuntimeError:
                 pass
+        self._flush_autosave()
         super().closeEvent(event)

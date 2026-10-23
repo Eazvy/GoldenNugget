@@ -20,6 +20,9 @@ user what was actually wrong.
 """
 
 import sqlite3
+import os
+from collections import OrderedDict
+from threading import RLock
 from os import path
 from typing import Optional
 
@@ -73,7 +76,7 @@ def is_encrypted_database(db_path) -> bool:
         return False
 
 
-def snapshot_problem(db_path, strict: bool = True) -> Optional[str]:
+def _snapshot_problem_uncached(db_path, strict: bool = True) -> Optional[str]:
     """Describe why ``db_path`` is not a usable PosterBoard snapshot, else None.
 
     strict=True requires the classic table set (pre-db5 schema).
@@ -119,6 +122,41 @@ def snapshot_problem(db_path, strict: bool = True) -> Optional[str]:
             conn.close()
         except sqlite3.Error:
             pass
+
+
+_validated_snapshots = OrderedDict()
+_validation_lock = RLock()
+
+
+def _snapshot_signature(db_path):
+    parts = []
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            st = os.stat(str(db_path) + suffix)
+            parts.append((st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns))
+        except FileNotFoundError:
+            parts.append(None)
+    return tuple(parts)
+
+
+def snapshot_problem(db_path, strict: bool = True) -> Optional[str]:
+    """Reuse only successful checks of an unchanged main file and journal set."""
+    try:
+        before = _snapshot_signature(db_path)
+        key = (os.path.abspath(db_path), strict, before)
+        with _validation_lock:
+            if key in _validated_snapshots:
+                _validated_snapshots.move_to_end(key)
+                return None
+        problem = _snapshot_problem_uncached(db_path, strict)
+        if problem is None and before == _snapshot_signature(db_path):
+            with _validation_lock:
+                _validated_snapshots[key] = True
+                while len(_validated_snapshots) > 32:
+                    _validated_snapshots.popitem(last=False)
+        return problem
+    except OSError:
+        return _snapshot_problem_uncached(db_path, strict)
 
 
 def posterboard_db_is_snapshot_ok(db_path, strict: bool = True) -> bool:

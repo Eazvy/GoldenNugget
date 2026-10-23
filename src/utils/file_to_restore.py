@@ -6,6 +6,7 @@ time, so it lives here (light stdlib-only namespace package) to keep the
 tweak -> restore import chain free of the device stack.
 """
 from enum import IntFlag
+from os import PathLike
 
 
 class _FileMode(IntFlag):
@@ -37,7 +38,7 @@ class _FileMode(IntFlag):
 
 class FileToRestore:
     def __init__(self,
-                 contents: str, restore_path: str, contents_path: str = None, domain: str = "",
+                 contents: bytes | str | None, restore_path: str, contents_path: str | PathLike[str] | None = None, domain: str | None = "",
                  owner: int = 501, group: int = 501, mode: _FileMode = None
                 ):
         self.contents = contents

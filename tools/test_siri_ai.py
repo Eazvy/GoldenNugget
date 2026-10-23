@@ -50,7 +50,8 @@ class SiriAITests(unittest.TestCase):
         self.assertEqual(files, [])
         tweak.set_enabled(True)
         for version, model in [('26.6', 'iPhone17,1'), ('27.0', 'iPad16,1'),
-                               ('27.0.1', 'iPhone17,1'), ('', '')]:
+                               ('28.0', 'iPhone17,1'), ('27.0', 'iPhone15,4'),
+                               ('27.0', 'iPhone15,2'), ('', '')]:
             with self.assertRaises(NuggetException):
                 tweak.apply_tweak(files, version, model)
         tweak.apply_tweak(files, '27.0', 'iPhone17,1')
@@ -60,6 +61,30 @@ class SiriAITests(unittest.TestCase):
             require_protective_delivery(files, False)
         require_protective_delivery(files, True)
         require_protective_delivery([], False)
+
+    def test_all_ios27_versions_and_supported_iphone_generations(self):
+        from src.gui.ios.compat import compatibility_reasons
+        from src.tweaks.tweak_names import TweakID
+        for version in ('27.0', '27.0.1', '27.1', '27.2', '27.9.3'):
+            for model in ('iPhone16,1', 'iPhone16,2', 'iPhone17,1', 'iPhone17,5',
+                          'iPhone18,1', 'iPhone18,5', 'iPhone19,7'):
+                with self.subTest(version=version, model=model):
+                    self.assertEqual(compatibility_reasons(TweakID.SiriAI, version, model), [])
+                    tweak = SiriAITweak()
+                    tweak.set_enabled(True)
+                    files = []
+                    tweak.apply_tweak(files, version, model)
+                    self.assertEqual(len(files), 1)
+        for version, model in (('26.9', 'iPhone16,1'), ('28.0', 'iPhone19,7'),
+                               ('27.1', 'iPhone15,4'), ('27.1', 'iPhone15,5'),
+                               ('27.1', 'iPad16,1'), ('27.1', '')):
+            self.assertTrue(compatibility_reasons(TweakID.SiriAI, version, model))
+        # Keep reset available for recovery even on hardware that cannot enable AI.
+        reset = SiriAITweak('reset')
+        reset.set_enabled(True)
+        files = []
+        reset.apply_tweak(files, '27.2', 'iPhone15,4')
+        self.assertEqual(len(files), 1)
 
     def test_manifest_file_and_directory_metadata(self):
         for action in ('enable', 'reset'):

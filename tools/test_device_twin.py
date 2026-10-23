@@ -32,6 +32,15 @@ def render(state, size=QSize(700, 760)):
 
 
 class TwinState(unittest.TestCase):
+    def test_search_button_replacement_respects_ios_version(self):
+        old = {'SBHideSearchAffordance': {'enabled': True, 'value': False}}
+        new = {'SBHomeScreenShowsSearchButton': {'enabled': True, 'value': False}}
+        self.assertFalse(build_state(old, '27.0.1', 'iPhone17,1').search_button)
+        self.assertTrue(build_state(old, '27.1', 'iPhone17,1').search_button)
+        self.assertTrue(build_state(new, '27.0.1', 'iPhone17,1').search_button)
+        self.assertFalse(build_state(new, '27.1', 'iPhone17,1').search_button)
+        self.assertFalse(build_state(new, '27.2', 'iPhone17,1').search_button)
+
     def test_stock_selection_draws_nothing_special(self):
         state = build_state({}, '26.2', 'iPhone15,3')
         self.assertEqual((state.cutout, state.home_button), ('island', False))

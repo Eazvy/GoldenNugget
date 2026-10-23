@@ -13,13 +13,76 @@ from __future__ import annotations
 import base64
 import re
 import zipfile
+from collections import OrderedDict
+from collections.abc import Mapping
+from threading import RLock
 from typing import Dict, List, Optional, Tuple
 
+from src.utils.cancellation import check_cancelled
 from .caml import parse_ca_document
 from .models import CADocument, TendieBundle
 
 _INDEX_NAMES = ("index.xml", "Index.xml")
 _DEFAULT_SCENE = "main.caml"
+
+
+class _ArchiveAssets:
+    """One lazily opened archive and a bounded byte cache shared by its scenes."""
+    def __init__(self, path):
+        import os
+        self.path = path
+        self.archive = None
+        st = os.stat(path)
+        self.signature = st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
+        self.archive = None
+        self.cache = OrderedDict()
+        self.cache_bytes = 0
+        self.lock = RLock()
+
+    def read(self, name):
+        import os
+        with self.lock:
+            if name in self.cache:
+                self.cache.move_to_end(name)
+                return self.cache[name]
+            if self.archive is None:
+                st = os.stat(self.path)
+                if (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns) != self.signature:
+                    raise OSError("Wallpaper archive changed after indexing")
+                self.archive = zipfile.ZipFile(self.path)
+            data = self.archive.read(name)
+            limit = 8 * 1024 * 1024
+            if len(data) <= limit:
+                while self.cache and self.cache_bytes + len(data) > limit:
+                    _, old = self.cache.popitem(last=False)
+                    self.cache_bytes -= len(old)
+                self.cache[name] = data
+                self.cache_bytes += len(data)
+            return data
+
+    def __del__(self):
+        archive = getattr(self, 'archive', None)
+        if archive is not None:
+            archive.close()
+
+
+class _LazyAssets(Mapping):
+    def __init__(self, source, entries, inline):
+        self.source, self.entries, self.inline = source, entries, inline
+
+    def __getitem__(self, key):
+        if key in self.entries:
+            try:
+                return self.source.read(self.entries[key])
+            except (KeyError, OSError, zipfile.BadZipFile):
+                raise KeyError(key) from None
+        return self.inline[key]
+
+    def __iter__(self):
+        return iter(dict.fromkeys((*self.entries, *self.inline)))
+
+    def __len__(self):
+        return len(self.entries.keys() | self.inline.keys())
 
 
 def _norm(p: str) -> str:
@@ -124,13 +187,15 @@ def _find_ca_path(pattern: str, paths: List[str]) -> Optional[str]:
     return None
 
 
-def _extract_ca_dir(base_dir: str, paths: List[str], zf: zipfile.ZipFile) -> Optional[CADocument]:
+def _extract_ca_dir(base_dir: str, paths: List[str], zf: zipfile.ZipFile,
+                    source=None) -> Optional[CADocument]:
+    check_cancelled()
     by_lower = {p.lower(): p for p in paths}
 
     def get(rel: str) -> Optional[zipfile.ZipInfo]:
         full = _norm(base_dir + rel)
         hit = by_lower.get(full.lower())
-        return zf.getinfo(hit or full) if (hit or full in zf.namelist()) else None
+        return zf.getinfo(hit) if hit is not None else None
 
     index_entry = None
     for name in _INDEX_NAMES:
@@ -144,6 +209,7 @@ def _extract_ca_dir(base_dir: str, paths: List[str], zf: zipfile.ZipFile) -> Opt
         if m:
             scene_name = m.group(1).strip()
 
+    check_cancelled()
     caml_entry = get(scene_name)
     if not caml_entry:
         base = scene_name.split("/")[-1]
@@ -157,11 +223,12 @@ def _extract_ca_dir(base_dir: str, paths: List[str], zf: zipfile.ZipFile) -> Opt
     caml_text = zf.read(caml_entry).decode("utf-8", errors="replace")
     caml_text, inline_assets = _extract_inline_assets(caml_text)
 
+    check_cancelled()
     doc = parse_ca_document(caml_text)
     if doc is None or doc.root is None:
         return None
 
-    assets: Dict[str, bytes] = {}
+    entries = {}
     for p in paths:
         if not p.lower().startswith(base_dir.lower()):
             continue
@@ -169,19 +236,13 @@ def _extract_ca_dir(base_dir: str, paths: List[str], zf: zipfile.ZipFile) -> Opt
             continue
         if not re.search(r"(^|/)assets/", p, re.IGNORECASE):
             continue
-        try:
-            data = zf.read(p)
-        except (KeyError, OSError, zipfile.BadZipFile):
-            continue
         after = re.split(r"assets/", p, flags=re.IGNORECASE)[-1]
         filename = after.split("/")[-1].strip()
-        if filename and data and filename not in assets:
-            assets[filename] = data
+        if filename and zf.getinfo(p).file_size:
+            entries.setdefault(filename, p)
 
-    for name, chunk in inline_assets.items():
-        assets.setdefault(name, chunk)
-
-    doc.assets = assets
+    source = source or _ArchiveAssets(zf.filename)
+    doc.assets = _LazyAssets(source, entries, inline_assets)
     return doc
 
 
@@ -190,7 +251,7 @@ def _extract_inline_assets(caml_text: str) -> Tuple[str, Dict[str, bytes]]:
     assets: Dict[str, bytes] = {}
 
     def repl(m: re.Match) -> str:
-        raw = m.group(2)
+        raw = m.group(1)
         try:
             data = base64.b64decode(raw)
         except Exception:
@@ -263,9 +324,10 @@ def load_tendie(tendie_path: str) -> Optional[TendieBundle]:
             wallpaper_dir = _find_ca_path("wallpaper.ca", paths)
 
         bundle = TendieBundle()
-        bundle.floating = _extract_ca_dir(floating_dir, paths, zf) if floating_dir else None
-        bundle.background = _extract_ca_dir(background_dir, paths, zf) if background_dir else None
-        bundle.wallpaper = _extract_ca_dir(wallpaper_dir, paths, zf) if wallpaper_dir else None
+        source = _ArchiveAssets(tendie_path)
+        bundle.floating = _extract_ca_dir(floating_dir, paths, zf, source) if floating_dir else None
+        bundle.background = _extract_ca_dir(background_dir, paths, zf, source) if background_dir else None
+        bundle.wallpaper = _extract_ca_dir(wallpaper_dir, paths, zf, source) if wallpaper_dir else None
 
         any_root = None
         for d in (bundle.floating, bundle.background, bundle.wallpaper):

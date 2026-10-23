@@ -45,9 +45,9 @@ class ReplaceOption(TemplateOption):
             self.default_preview = self.preview_lbl.pixmap()
 
     def create_interface(self, options_widget: QtWidgets.QWidget, options_layout: QtWidgets.QVBoxLayout):
-        # replacable object
+        # replaceable object
         repl_widget = QtWidgets.QWidget(options_widget)
-        repl_layout = QtWidgets.QHBoxLayout(options_widget)
+        repl_layout = QtWidgets.QHBoxLayout(repl_widget)
         repl_layout.setContentsMargins(0, 2, 0, 2)
         repl_lbl = QtWidgets.QLabel(repl_widget)
         req_label = ""
@@ -57,7 +57,7 @@ class ReplaceOption(TemplateOption):
         repl_layout.addWidget(repl_lbl)
         # button for importing files
         imp_widget = QtWidgets.QWidget(options_widget)
-        imp_layout = QtWidgets.QVBoxLayout(options_widget)
+        imp_layout = QtWidgets.QVBoxLayout(imp_widget)
         imp_widget.setLayoutDirection(QtCore.Qt.LayoutDirection.RightToLeft)
         self.repl_btn = QtWidgets.QToolButton(imp_widget)
         self.repl_btn.setIcon(self.import_icon)

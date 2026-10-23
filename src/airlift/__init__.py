@@ -187,12 +187,12 @@ def _bplist(payload: dict[str, Any]) -> bytes:
     return plistlib.dumps(payload, fmt=plistlib.FMT_BINARY, sort_keys=False)
 
 
-async def _send_prefixed(connection, payload: bytes, endianity: str) -> None:
-    await connection.sendall(struct.pack(endianity + "L", len(payload)) + payload)
+async def _send_prefixed(connection, payload: bytes, endianness: str) -> None:
+    await connection.sendall(struct.pack(endianness + "L", len(payload)) + payload)
 
 
-async def _recv_prefixed(connection, endianity: str) -> bytes:
-    return await connection.recv_prefixed(endianity)
+async def _recv_prefixed(connection, endianness: str) -> bytes:
+    return await connection.recv_prefixed(endianness)
 
 
 @lru_cache(maxsize=None)

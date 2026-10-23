@@ -286,7 +286,7 @@ class RestoreCacheThread(QThread):
     async def _restore(self):
         from pathlib import Path
         from src.restore.protective import (
-            make_protective_working_copy,
+            make_protective_working_copy, discard_protective_working_copy,
             clean_backup_for_restore,
             verify_backup_payloads,
             find_latest_protective_backup,
@@ -344,22 +344,13 @@ class RestoreCacheThread(QThread):
         # in it" is not enough, because a partial pull would then let the prune
         # below delete the backup's own copy of the photos.
         media_dir = recovery_media_dir(source_root, udid, cache_base=base)
-        media_has_content = media_store_verified(media_dir)
-        removed_rows, removed_files = await asyncio.to_thread(
-            clean_backup_for_restore, working_root, udid,
-            include_keychain=bool(self._backup_password()),
-            manifest_password=self._backup_password(),
-            exclude_afc_media_trees=media_has_content)
+        from src.restore.recovery import RecoverySource, RecoveryBackend, prepare_recovery
+        prepared = await prepare_recovery(
+            RecoverySource(working_root, udid, self._backup_password(),
+                           bool(self._backup_password()), media_dir),
+            RecoveryBackend(clean_backup_for_restore, verify_backup_payloads, media_store_verified))
         self.update_label(
-            f"Prepared backup (-{removed_rows} pruned rows). Connecting to device...")
-        missing = await asyncio.to_thread(
-            verify_backup_payloads, working_root, udid,
-            self._backup_password())
-        if missing:
-            raise RuntimeError(
-                f"{len(missing)} manifest rows lack payloads; the backup is "
-                f"incomplete and cannot be restored. Remove the cache and apply "
-                f"again to rebuild it.")
+            f"Prepared backup (-{prepared.removed_rows} pruned rows). Connecting to device...")
 
         lc = None
         async with lockdown_session(udid) as _ld:
@@ -386,7 +377,7 @@ class RestoreCacheThread(QThread):
                 # done, so an incomplete push must abort the apply instead of
                 # letting it report success with missing media
                 self.update_label(
-                    f"Restoring photos/videos over AFC ({describe_media_store(media_dir)})...")
+                    f"Restoring photos/videos over AFC ({describe_media_store(media_dir, verify=False)})...")
                 pushed = await restore_media_via_afc(
                     lc, media_dir, progress_callback=self._progress_cb,
                     prompt_choice=self.prompt_user_choice,
@@ -408,6 +399,7 @@ class RestoreCacheThread(QThread):
                         f"AFC media restore failed for {len(pushed['failed'])} "
                         f"file(s) (e.g. {pushed['failed'][:3]}) — the photos on "
                         f"the device are incomplete")
+        discard_protective_working_copy(working_root)
         self.update_label("Data restored successfully.")
 
     def _progress_cb(self, value):

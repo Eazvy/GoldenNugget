@@ -69,6 +69,7 @@ class TweakSpec:
     exclusive_with: Optional[TweakID] = None
     disabled: bool = False  # True = tweak is cut off: never loaded, never applied, never rendered
     supported_models: tuple[str, ...] = ()
+    requires_apple_intelligence: bool = False
 
 
 def _t(id_: TweakID, section: Section, title: str, location: FileLocation,
@@ -155,17 +156,26 @@ def _siri_ai(action):
 
 
 SPECS: tuple[TweakSpec, ...] = (
+    # AXSettings key observed in iOS 27.0.1 (24A446). Managed delivery still
+    # needs device validation; leave the user's setting alone until selected.
+    _t(TweakID.LimitDisplayRefreshRate, Section.INTERNAL, 'Limit Frame Rate to 60 FPS',
+       FileLocation.accessibility, 'LimitDisplayRefreshRate',
+       'Limits the maximum display frame rate to 60 fps on ProMotion displays. Has no effect on displays already limited to 60 Hz.',
+       min_version='27.0', experimental=True,
+       factory=lambda: _experimental_domain_boolean(
+           FileLocation.accessibility, 'LimitDisplayRefreshRate'),
+       warning='Experimental: applying this setting has not been verified on a device. Turn off and apply to remove the requested frame-rate limit.'),
     _t(TweakID.SiriAI, Section.INTERNAL, 'Siri AI (Ineligible Regions)',
        FileLocation.siriAIOverrides, 'SiriAI',
-       'Experimental eligibility override by Project Linwood (mattisklein). Verified on iPhone 16 Pro, iOS 27.0 build 24A437 only.',
-       min_version='27.0', max_version='27.0', iphone_only=True,
-       experimental=True,
+       'Experimental eligibility override by Project Linwood (mattisklein), available on iPhone 15 Pro and later with iOS 27. Verified upstream on iPhone 16 Pro, build 24A437; other devices and builds are untested.',
+       min_version='27.0', max_version='27.99.99', iphone_only=True,
+       experimental=True, requires_apple_intelligence=True,
        factory=lambda: _siri_ai('enable'), exclusive_with=TweakID.ResetSiriAIOverrides,
        warning='Requires an unencrypted protective backup and a reboot. Set Siri language to English (US), then complete consent in Settings. This replaces ALL existing eligibility overrides. Other builds are untested. Turning this switch off does not undo an applied override; use Reset Siri AI Overrides and apply.'),
     _t(TweakID.ResetSiriAIOverrides, Section.INTERNAL, 'Reset Siri AI Overrides',
        FileLocation.siriAIOverrides, 'ResetSiriAIOverrides',
        'Writes a valid empty eligibility override archive. This clears ALL eligibility overrides, including overrides installed by other tools.',
-       min_version='27.0', max_version='27.0', iphone_only=True,
+       min_version='27.0', max_version='27.99.99', iphone_only=True,
        experimental=True,
        factory=lambda: _siri_ai('reset'), exclusive_with=TweakID.SiriAI,
        warning='This clears ALL eligibility overrides, not just Siri AI. It cannot recover a previous override map. Requires an unencrypted protective backup; apply and reboot.'),
@@ -1013,7 +1023,18 @@ SPECS: tuple[TweakSpec, ...] = (
        description='Stops Home Screen icons shifting as you tilt the device, .'),
     _t(TweakID.SBHideSearchAffordance, Section.SPRINGBOARD, 'Hide Home Screen Search Button',
        FileLocation.springboard, "SBHomeScreenShowsSearchAffordance", value=False,
-       description='Hides the Search button below Home Screen icons, .'),
+       max_version='27.0.99',
+       description='Hides the Search button below Home Screen icons on versions before iOS 27.1.'),
+    # Replacement key reported for iOS 27.1; no Duo-only hardware restriction
+    # has been established. Keep the old ID for existing presets on older OSes.
+    _t(TweakID.SBHomeScreenShowsSearchButton, Section.SPRINGBOARD,
+       'Hide Home Screen Search Button (iOS 27.1+)',
+       FileLocation.springboard, 'SBHomeScreenShowsSearchButton', value=False,
+       min_version='27.1', experimental=True,
+       factory=lambda: _experimental_domain_boolean(
+           FileLocation.springboard, 'SBHomeScreenShowsSearchButton', False, True),
+       description='Hides the Search button below Home Screen icons using the replacement iOS 27.1 setting.',
+       warning='Reported for iOS 27.1; not yet verified on a device. Turn off and apply to show the Search button again.'),
 
     # --- Internal Options ---
     _t(TweakID.SBBuildNumber, Section.INTERNAL, 'Show System Build in Status Bar', GP, "UIStatusBarShowBuildVersion",

@@ -142,24 +142,23 @@ def _materialise_backup(device_dir: str, manifest: str, out_dir: str) -> int:
     directories); missing payloads are simply skipped, exactly like the
     reference pull tool. Returns the number of files materialised.
     """
+    from shutil import copyfile
+    count = 0
     conn = sqlite3.connect(f"file:{manifest}?mode=ro", uri=True)
     try:
-        rows = conn.execute(
-            "SELECT relativePath, fileID, flags FROM Files").fetchall()
+        for rel_path, file_id in conn.execute(
+                "SELECT relativePath, fileID FROM Files WHERE flags = 1"):
+            if not file_id:
+                continue
+            src = os.path.join(device_dir, file_id[:2], file_id)
+            if not os.path.isfile(src):
+                continue
+            dst = os.path.join(out_dir, rel_path.lstrip("/"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            copyfile(src, dst)
+            count += 1
     finally:
         conn.close()
-    count = 0
-    for rel_path, file_id, flags in rows:
-        if flags != 1 or not file_id:
-            continue
-        src = os.path.join(device_dir, file_id[:2], file_id)
-        if not os.path.isfile(src):
-            continue
-        dst = os.path.join(out_dir, rel_path.lstrip("/"))
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        with open(src, "rb") as source, open(dst, "wb") as target:
-            target.write(source.read())
-        count += 1
     return count
 
 

@@ -1,6 +1,6 @@
 from .status_setter import Setter, StatusBarItem
 from .statusbar_archive import ARCHIVE_DOMAIN, ARCHIVE_PATH, build_archive
-from ..tweak_classes import Tweak, _notify_tweak_change
+from ..tweak_classes import Tweak
 from src.utils.file_to_restore import FileToRestore
 
 from cffi import FFI
@@ -13,7 +13,7 @@ class StatusBarTweak(Tweak):
     def _apply_changes(self, overrides) -> None:
         setter = self.setter
         setter.apply_changes(overrides)
-        _notify_tweak_change()
+        self._change_bus.notify()
         return None
 
     # iOS 27+: the classic binary statusBarOverrides file is no longer read and
