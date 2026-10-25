@@ -1043,7 +1043,9 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                     return await _live_backup(lc)
                 manifest_password = password
                 self._backup_password = password  # reuse it for the Phase 3 restore prompt
-            from src.restore.protective import CACHE_REFRESH_SECS, ProtectiveBackupCache
+            from src.restore.protective import (CACHE_MEDIA_REFRESH_SECS,
+                                               CACHE_REFRESH_SECS,
+                                               ProtectiveBackupCache)
             cache = ProtectiveBackupCache(udid, product_version=self.get_current_device_version(),
                                           encrypted=encrypted)
             found = cache.locate()
@@ -1054,13 +1056,41 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
             # the pull) instead of being carried into the wipe.
             media_ready = (not use_afc_media
                            or media_store_verified(str(cache.media_dir)))
-            # fast path: a fresh cache (no wallpapers pending, media already in
-            # sync) is reused as-is — no device session at all; past the TTL it
-            # gets an incremental refresh. The AFC media store has to exist too,
-            # or the refresh (which pulls the photos) is still needed.
-            if found and not needs_posterboard and found["age_secs"] < CACHE_REFRESH_SECS and media_ready:
+            # Fast path: a fresh master is reused as-is — no device session at
+            # all. Past the TTL it gets an incremental refresh session.
+            #
+            # PosterBoard work does NOT force a refresh: the wallpaper
+            # database only needs the PosterBoard container, and the targeted
+            # PosterBoard-only backup pulls exactly that (everything else the
+            # device offers is drained mid-stream). Forcing a full master
+            # refresh for it re-uploaded the entire protective scope on every
+            # wallpaper apply — the main reason the cache felt useless.
+            master_fresh = bool(found) and found["age_secs"] < CACHE_REFRESH_SECS
+            # The AFC photo store has its own freshness window: it is the
+            # safety net for the device's media, so it must not be older than
+            # its own TTL even when the master itself is still fresh.
+            media_stale = (use_afc_media
+                           and found is not None
+                           and found.get("media_age_secs", 0) >= CACHE_MEDIA_REFRESH_SECS)
+            if master_fresh and media_ready and not media_stale:
                 log_info(f"Cache is {found['age_secs'] // 60} min old — reusing without a backup session")
                 master_root = str(cache.master_root)
+                # The reused master may carry a stale PosterBoard database, so
+                # do NOT claim it as the source of one. The caller then fetches
+                # a fresh database through the targeted PosterBoard-only
+                # channel, which pulls just that container instead of
+                # re-uploading the whole protective scope.
+                pb_from_cache = False
+            elif master_fresh and media_ready and media_stale:
+                # The master is still good but the photo store has aged out.
+                # Re-pull the photos only (a diff — just the new objects
+                # transfer) instead of re-reading the whole protective scope.
+                log_info("Cache master is fresh — refreshing the photo store only")
+                update_label(QCoreApplication.tr("Refreshing photo backup..."))
+                await cache.refresh_media(
+                    lc, progress_callback=self._backup_progress(update_label, str(cache.media_dir)))
+                master_root = str(cache.master_root)
+                pb_from_cache = False
             else:
                 update_label(QCoreApplication.tr("Backing up device (cached)..."))
                 master_root = await cache.refresh(
@@ -1068,15 +1098,19 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                     include_photos=True, include_posterboard=needs_posterboard,
                     include_keychain=encrypted,
                     include_afc_media=use_afc_media)
+                pb_from_cache = True
 
             media_src = str(cache.media_dir) if use_afc_media else ""
             prepared = PreparedBackup(root=master_root, manifest_password=manifest_password,
-                                      master=True, media_src=media_src)
+                                      master=True, view_root=str(cache.view_root),
+                                      media_src=media_src)
             if needs_posterboard and encrypted:
                 log_warn("Encrypted cache cannot yield a readable PosterBoard DB — "
                          "falling back to a separate backup")
                 return prepared, False
-            return prepared, _register_pb_db(master_root)
+            if pb_from_cache:
+                return prepared, _register_pb_db(master_root)
+            return prepared, False
 
     async def refresh_backup_cache(self, update_label=lambda x: None) -> str:
         """Force a refresh of the backup cache master for the current device.

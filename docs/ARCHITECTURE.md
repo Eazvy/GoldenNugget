@@ -297,10 +297,11 @@ Phase 0 (in device_manager): protective backup + PosterBoard DB
                   (fresh live perform_protective_backup(), or the persistent
                    cache master + incremental refresh when the experimental
                    cache is enabled)
-Phase 1 (0-40%):  cache master → snapshot, then pruned + tweak-injected IN
-                  PLACE (it IS the Phase 3 restore source; the cached master
-                  returns to its pristine full-manifest state afterwards via
-                  regenerate_cache_from_snapshot); a fresh Phase-0 live
+Phase 1 (0-40%):  cache master → a disposable restore VIEW (pruned manifest
+                  copy + hardlinked payloads), pruned + tweak-injected; the
+                  master itself is never modified, so it keeps its full
+                  manifest for the next incremental refresh and a crashed
+                  apply cannot leave it half-pruned; a fresh Phase-0 live
                   backup is pruned IN PLACE (no /tmp copy ever)
                   → clean_backup_for_restore() prune
                   → inject PosterBoard files (pb_inject_files, AppDomain)
@@ -330,7 +331,11 @@ Phase 4 (90-95%): reboot_device()  — before the media restore and setup skip,
                   SetCloudConfiguration only raises AlreadyPresent)
 Phase 5 (95-98%): _wait_for_device() reconnects (only after a Phase 4 reboot),
                   then restore_media_via_afc() pushes the AFC-pulled
-                  photos/videos back (they were excluded from the backup),
+                  photos/videos back (they were excluded from the backup) —
+                  as a DIFF against the device's own media tree, so only the
+                  files the device actually lacks are transferred; the
+                  explicit recovery restores pass diff=False so the store's
+                  copy always wins
                   then skip_all_setup27()  — if skip-setup requested, on every
                   apply including Phase 2-skipped ones; a device that was never
                   wiped may still hit CloudConfigurationAlreadyPresentError
@@ -403,10 +408,14 @@ the `ProtectiveBackupCache` to `protective_cache.py` (both re-exported from
   ConfigurationProfiles was reverted, but the code still keeps it.)
 - `make_protective_working_copy()` — hardlink clone (metadata real-copied);
   pruning never corrupts the master. Used by the manual restore tools
-  (`restore_cache.py`, `apply_worker.py`); the main apply flow instead snapshots
-  the master (`make_cache_snapshot`), modifies it in place (`clean_backup_for_restore`
-  + `inject_file_into_backup`) and regenerates it afterwards
-  (`regenerate_cache_from_snapshot`).
+  (`restore_cache.py`, `apply_worker.py`).
+- `make_restore_view()` — the main apply flow's equivalent for the cache
+  master: a disposable VIEW of the master (pruned manifest copy + hardlinked
+  payloads) that the apply prunes and tweak-injects instead of the master
+  itself. The master stays a pristine full-manifest mirror, so the next
+  incremental refresh still diffs against a complete manifest and a crashed
+  apply cannot leave it half-pruned. `discard_restore_view()` removes it
+  afterwards — the hardlinks mean no payload data is touched.
 - `clean_backup_for_restore()` — prunes to the keep-set; self-heals by
   dropping regular-file rows whose payload is missing (MBErrorDomain/205)
   while keeping directory rows (renameatx ENOENT). Encrypted manifests are

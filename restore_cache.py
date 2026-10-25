@@ -360,8 +360,11 @@ async def run(args) -> int:
                                  progress_cb)
         if media_dir:
             print("Restoring photos/videos over AFC...")
+            # diff=False: an explicit recovery restore — the store's copy must
+            # win over whatever the device holds, even at the same size.
             pushed = await restore_media_via_afc(lc, media_dir,
-                                                 progress_callback=progress_cb)
+                                                 progress_callback=progress_cb,
+                                                 diff=False)
             if pushed.get('failed') or not pushed.get('files'):
                 raise RuntimeError("AFC photo/video restore is incomplete; backup kept on this computer")
             print("Photos/videos restored over AFC.")

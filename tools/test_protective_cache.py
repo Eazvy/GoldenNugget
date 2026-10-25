@@ -15,21 +15,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.restore.protective import (
     ProtectiveBackupCache,
     clean_backup_for_restore,
-    make_cache_snapshot,
+    discard_restore_view,
     make_protective_working_copy,
-    regenerate_cache_from_snapshot,
+    make_restore_view,
 )
 
 UDID = "00008101-TESTUDID"
 PASS = 0
-
-
-class _FakeInject:
-    """Minimal stand-in for FileToRestore (only what make_cache_snapshot touches)."""
-
-    def __init__(self, domain, restore_path):
-        self.domain = domain
-        self.restore_path = restore_path
 
 
 def check(name, cond):
@@ -159,33 +151,67 @@ def main():
     conn.close()
     check("master manifest still has sms.db row", "Library/SMS/sms.db" in master_rels)
 
-    # --- snapshot/regenerate cycle (apply flow): master IS the restore source ---
-    snap_base = make_cache_snapshot(str(cache.master_root), UDID,
-                                    inject_files=[_FakeInject("HomeDomain", "Library/Preferences/testTweak.plist")])
-    snap_device = Path(snap_base) / UDID
-    check("snapshot created", snap_device.is_dir())
-    check("snapshot recorded inject plan",
-          (Path(snap_base) / "inject_plan.json").is_file())
-    # master pruned and tweak-injected IN PLACE (old working-copy semantics gone)
-    clean_backup_for_restore(str(cache.master_root), UDID)
+    # --- restore view (apply flow): the master is IMMUTABLE ---
+    # The apply prunes + tweak-injects a disposable view of the master, never
+    # the master itself, so the master stays a pristine full-manifest mirror
+    # (which is what the next incremental refresh diffs against).
+    view_base = make_restore_view(str(cache.master_root), UDID, str(tmp / "view"))
+    view_device = Path(view_base) / UDID
+    check("restore view created", view_device.is_dir())
+    check("restore view has its own manifest",
+          (view_device / "Manifest.db").is_file())
+    check("restore view manifest is a separate file (not a hardlink)",
+          not _same_file(view_device / "Manifest.db", cache.device_dir / "Manifest.db"))
+    accounts_id = _file_id_for("HomeDomain", "Library/Accounts/Accounts3.sqlite")
+    accounts_payload = Path(accounts_id[:2]) / accounts_id
+    check("restore view payloads are hardlinked to the master",
+          _same_file(view_device / accounts_payload,
+                     cache.device_dir / accounts_payload))
+
+    # prune + inject the VIEW, never the master
+    clean_backup_for_restore(view_base, UDID)
+    conn = sqlite3.connect(str(view_device / "Manifest.db"))
+    view_rels = {r[0] for r in conn.execute("SELECT relativePath FROM Files")}
+    conn.close()
+    check("view pruned by the apply", "Library/SMS/sms.db" not in view_rels)
+    check("view kept the protective rows",
+          "Library/Accounts/Accounts3.sqlite" in view_rels)
+
+    # the master is untouched: full manifest AND every payload still there
     conn = sqlite3.connect(str(cache.device_dir / "Manifest.db"))
-    pruned_rels = {r[0] for r in conn.execute("SELECT relativePath FROM Files")}
+    master_rels = {r[0] for r in conn.execute("SELECT relativePath FROM Files")}
     conn.close()
-    check("master pruned in place by apply", "Library/SMS/sms.db" not in pruned_rels)
-    # the snapshot still carries the pristine full manifest
-    conn = sqlite3.connect(str(snap_device / "Manifest.db"))
-    snap_rels = {r[0] for r in conn.execute("SELECT relativePath FROM Files")}
-    conn.close()
-    check("snapshot kept the full manifest", "Library/SMS/sms.db" in snap_rels)
-    # regenerate: the master returns to its pristine full-manifest state
-    regenerate_cache_from_snapshot(snap_base, str(cache.master_root), UDID)
+    check("master manifest untouched by the apply",
+          "Library/SMS/sms.db" in master_rels)
+    check("master payload untouched by the apply",
+          (cache.device_dir / accounts_payload).is_file())
+
+    # dropping the view must not touch the master's data
+    discard_restore_view(view_base, UDID)
+    check("view removed", not view_device.exists())
+    check("master payloads survive the view being dropped",
+          (cache.device_dir / accounts_payload).is_file())
     conn = sqlite3.connect(str(cache.device_dir / "Manifest.db"))
-    restored_rels = {r[0] for r in conn.execute("SELECT relativePath FROM Files")}
+    master_rels = {r[0] for r in conn.execute("SELECT relativePath FROM Files")}
     conn.close()
-    check("regeneration restored full manifest", "Library/SMS/sms.db" in restored_rels)
-    check("regeneration removed the snapshot", not Path(snap_base).exists())
+    check("master manifest survives the view being dropped",
+          "Library/SMS/sms.db" in master_rels)
 
     print(f"\nALL {PASS} CHECKS PASSED")
+
+
+def _same_file(a, b) -> bool:
+    """True when both paths exist and are the same inode (a hardlink)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _file_id_for(domain, rel_path) -> str:
+    """The manifest's fileID for a row (sha1 of domain-relativePath)."""
+    import hashlib
+    return hashlib.sha1(f"{domain}-{rel_path}".encode()).hexdigest()
 
 
 if __name__ == "__main__":

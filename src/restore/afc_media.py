@@ -482,6 +482,32 @@ async def _backup_media_tree(afc_lockdown_client, root: str, diff: bool,
     return tally
 
 
+async def _device_media_inventory(afc) -> dict:
+    """Map the media trees currently on the DEVICE to their sizes.
+
+    The mirror image of :func:`_media_inventory`, but read back from the
+    device over AFC. Used to decide which files still have to be pushed:
+    a file the device already holds at the same size needs no transfer.
+
+    Symlinks are skipped (they are never pushed), and a directory that
+    cannot be listed is skipped as well — the caller then pushes the files
+    it could not confirm, which is the safe direction (never skip a file
+    that might be missing).
+    """
+    inventory = {}
+    entries: list = []
+    failed: list = []
+    for name in sorted(AFC_MEDIA_TREES):
+        try:
+            await _list_afc_tree(afc, f"/{name}", entries, "warn", failed)
+        except Exception as e:  # noqa: BLE001 - a tree we cannot read is not fatal
+            log_warn(f"AFC media: could not list /{name} on the device: {e} "
+                     f"— files below it will be re-pushed")
+    for _src, rel, st in entries:
+        inventory[rel] = int(st.get("st_size", 0))
+    return inventory
+
+
 async def _push_one(afc, src: str, remote_rel: str) -> int:
     """Push one local file onto the device, returning bytes written."""
     size = os.path.getsize(src)
@@ -735,16 +761,29 @@ async def restore_media_via_afc(lockdown_client, media_root: str,
                                 progress_callback=None,
                                 on_error: str = "raise",
                                 prompt_choice=None,
-                                unlock_prompt=None) -> dict:
+                                unlock_prompt=None,
+                                diff: bool = True) -> dict:
     """Push a previously pulled Media tree back to the device over AFC.
 
     Mirrors ``media_root`` (which holds the AFC root layout: DCIM/, PhotoData/,
     ...) back onto the device after the iOS 27 security-recovery wipe. Returns
-    a tally dict ``{"files": int, "bytes": int}``.
+    a tally dict ``{"files": int, "bytes": int, "skipped": int}``.
 
     The device has just rebooted, so the AFC open waits out a locked screen
     first (see ``open_afc_for_media``) -- pass ``prompt_choice`` to get the
     Abort/Resume prompt if that wait runs out.
+
+    With ``diff=True`` (the default) only the files the device is actually
+    missing (or holds at a different size) are transferred. The device's
+    current media tree is inventoried over AFC and compared against the store
+    with the same size rule the pull side uses, so a store that is already
+    in sync costs one directory listing and no transfer at all. This is what
+    makes a repeat apply cheap: the photos are already on the device and do
+    not need to go up the cable again.
+
+    A file the device holds at the same size is skipped -- the identical rule
+    the pull-side diff uses. A file the device holds at a *different* size is
+    still pushed, so the store stays authoritative for anything that differs.
     """
     root = os.path.abspath(media_root)
     if not os.path.isdir(root):
@@ -766,9 +805,35 @@ async def restore_media_via_afc(lockdown_client, media_root: str,
     async with _pausable_media_connection(lockdown_client, _log, prompt_choice, unlock_prompt) as checkpoint:
         done_files = 0
         done_bytes = 0
+        skipped = 0
         failed: list[str] = []
         made_dirs: set = set()
+
+        # Inventory what the device already holds so unchanged files are not
+        # transferred again. Read once, up front: the tree does not change
+        # while we push.
+        device_sizes: dict = {}
+        if diff:
+            try:
+                device_sizes = await _device_media_inventory(await checkpoint())
+            except Exception as e:  # noqa: BLE001 - fall back to pushing everything
+                log_warn(f"AFC media: could not inventory the device media tree "
+                         f"({e}) — pushing every file")
+                device_sizes = {}
+
+        pending = []
         for src, rel in entries:
+            size = inventory.get(rel, 0)
+            if rel in device_sizes and device_sizes[rel] == size:
+                skipped += 1
+                continue
+            pending.append((src, rel, size))
+        if skipped:
+            log_info(f"AFC media: {skipped} of {len(entries)} files are already "
+                     f"on the device at the same size — not re-transferring them")
+        pending_bytes = sum(size for _src, _rel, size in pending)
+
+        for src, rel, size in pending:
             afc = await checkpoint()
             remote = f"/{rel}"
             rdir = posixpath.dirname(remote)
@@ -786,15 +851,18 @@ async def restore_media_via_afc(lockdown_client, media_root: str,
                     raise NuggetException(msg) from e
             done_files += 1
             done_bytes += n
-            if done_files % 25 == 0 or done_files == len(entries):
+            if done_files % 25 == 0 or done_files == len(pending):
                 _log(_progress_str("Restoring photos/videos over AFC",
-                                   done_files, len(entries), done_bytes, total_bytes))
+                                   done_files, len(pending), done_bytes, pending_bytes))
 
-        log_info(f"AFC media restore complete: {done_files} files, "
-                 f"{done_bytes / (1024 * 1024):.1f} MB")
+        log_info(f"AFC media restore complete: {done_files} files pushed, "
+                 f"{skipped} already on the device, "
+                 f"{done_bytes / (1024 * 1024):.1f} MB transferred")
         if failed:
             log_warn(f"AFC media restore: {len(failed)} files failed "
                      f"(e.g. {failed[:3]})")
-            tally = {"files": done_files, "bytes": done_bytes, "failed": failed}
+            tally = {"files": done_files, "bytes": done_bytes, "skipped": skipped,
+                     "failed": failed}
             return tally
-    return {"files": done_files, "bytes": done_bytes}
+    return {"files": done_files, "bytes": done_bytes, "skipped": skipped}
+

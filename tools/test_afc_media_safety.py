@@ -338,6 +338,52 @@ def test_push():
 
 
 # =============================================================================
+def test_push_diff():
+    print("\nrestore_media_via_afc: only what the device lacks is transferred")
+    src = store("diffpush")
+    write_file(os.path.join(src, "DCIM", "SAME.JPG"), b"s" * 500)
+    write_file(os.path.join(src, "DCIM", "CHANGED.JPG"), b"c" * 400)
+    write_file(os.path.join(src, "DCIM", "MISSING.JPG"), b"m" * 300)
+    _write_media_state(src, files=3, bytes_=500 + 400 + 300, skipped=0)
+
+    # The device already holds SAME.JPG at the same size (so it is up to
+    # date) and CHANGED.JPG at a DIFFERENT size (so the store's copy wins).
+    fake = FakeAfc(files={
+        "/DCIM/SAME.JPG": b"s" * 500,
+        "/DCIM/CHANGED.JPG": b"x" * 999,
+    })
+    tally = use_afc(fake, lambda: asyncio.run(
+        afc_media.restore_media_via_afc(None, src)))
+    check("the unchanged file is NOT re-transferred",
+          "/DCIM/SAME.JPG" not in fake.written, list(fake.written))
+    check("the changed file IS re-transferred",
+          fake.written.get("/DCIM/CHANGED.JPG") == b"c" * 400)
+    check("the missing file IS transferred",
+          fake.written.get("/DCIM/MISSING.JPG") == b"m" * 300)
+    check("only the two needed files were pushed", tally["files"] == 2, tally)
+    check("the skipped file is reported", tally.get("skipped") == 1, tally)
+
+    # diff=False forces everything (the explicit "restore my data" path).
+    fake2 = FakeAfc(files={"/DCIM/SAME.JPG": b"s" * 500})
+    tally2 = use_afc(fake2, lambda: asyncio.run(
+        afc_media.restore_media_via_afc(None, src, diff=False)))
+    check("diff=False pushes every file including unchanged ones",
+          tally2["files"] == 3 and "/DCIM/SAME.JPG" in fake2.written, tally2)
+
+    # A device that cannot list its media tree must not cause files to be
+    # skipped — the push has to fall back to transferring everything.
+    class BrokenListAfc(FakeAfc):
+        async def listdir(self, path):
+            raise RuntimeError("device busy")
+
+    broken = BrokenListAfc(files={"/DCIM/SAME.JPG": b"s" * 500})
+    tally3 = use_afc(broken, lambda: asyncio.run(
+        afc_media.restore_media_via_afc(None, src)))
+    check("an unreadable device tree falls back to pushing everything",
+          tally3["files"] == 3, tally3)
+
+
+# =============================================================================
 def test_pre_apply_gate():
     print("\nDeviceManager._require_media_copy: refuse before the wipe")
     good = store("gate_good")
@@ -589,6 +635,7 @@ def main():
     test_pull()
     test_pull_one()
     test_push()
+    test_push_diff()
     test_pre_apply_gate()
     test_restore_call_sites()
     test_afc_open_retry()

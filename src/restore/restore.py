@@ -30,15 +30,15 @@ from .inject import _is_encrypted_backup
 from .protective import (
     PreparedBackup,
     clean_backup_for_restore,
+    discard_restore_view,
     inject_files_into_backup,
     log_error,
     log_warn,
     log_info,
-    make_cache_snapshot,
+    make_restore_view,
     new_protective_backup_dir,
     perform_protective_backup,
     prune_protective_backups,
-    regenerate_cache_from_snapshot,
     verify_backup_payloads,
     WORKING_COPY_PREFIX,
 )
@@ -534,6 +534,19 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
     """
     udid = lockdown_client.udid
     started = time.monotonic()
+    # Per-phase timings, logged as the apply progresses. Without them the
+    # dominant cost of an apply is invisible — which is exactly why the cache
+    # looked like it did nothing.
+    phase_started = started
+
+    def mark_phase(name: str) -> None:
+        """Log the elapsed time of the phase that just finished."""
+        nonlocal phase_started
+        now = time.monotonic()
+        log_info(f"Phase timing — {name}: {now - phase_started:.1f}s "
+                 f"({now - started:.1f}s into the apply)")
+        phase_started = now
+
     using_cache = prepared_backup_root is not None
     # Media pulled over AFC (sibling of the run's device_backup, or the caller's
     # prepared run) is pushed back in Phase 5, after the Phase 4 reboot and
@@ -553,18 +566,18 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
     manifest_password = ((prepared_backup_root.manifest_password if using_cache else "")
                          or backup_password)
     protective_dir = None
-    snapshot_dir = None
-    # Cache masters carry the tweak files through Phase 3 in place (they ARE the
-    # restore source), returning to their pristine full-manifest state once the
-    # apply succeeds via a snapshot/regenerate cycle.
-    regenerate_cache = using_cache and prepared_backup_root.master
-    if regenerate_cache:
-        # Record the pristine state of the master (and what this injection will
-        # change) BEFORE pruning/injecting tweaks into it in place. After the
-        # apply the master is regenerated from this snapshot.
-        snapshot_dir = await asyncio.to_thread(
-            make_cache_snapshot, prepared_backup_root.root, udid, list(inject_files or []))
-        backup_root = prepared_backup_root.root
+    view_dir = None
+    # Cache masters are immutable: the apply builds a disposable restore *view*
+    # of the master (a pruned copy of the manifest plus hardlinks to the
+    # payloads) and restores from that. The master keeps its pristine
+    # full-manifest state, so the next refresh still diffs against a complete
+    # manifest and a crashed apply cannot leave it half-pruned.
+    use_master_view = using_cache and prepared_backup_root.master
+    if use_master_view:
+        view_dir = await asyncio.to_thread(
+            make_restore_view, prepared_backup_root.root, udid,
+            prepared_backup_root.view_root)
+        backup_root = view_dir
         # No protective_dir: a cache master must never be rmtree'd (it is the
         # incremental store + the only copy of user data between Phase 2 and 3).
     elif using_cache:
@@ -662,6 +675,7 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
             )
         log_info(f"Phase 1: Pruned backup: -{removed_rows} manifest rows, -{removed_files} payload files "
                  f"({time.monotonic() - started:.1f}s into the run)")
+        mark_phase("1 prune + prepare")
 
 
         # Tweak files ride the protective restore on beta 6+, since AppDomain
@@ -703,6 +717,7 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
                 raise NuggetException(
                     f"{len(missing_payloads)} manifest rows lack payloads "
                     f"(e.g. {missing_payloads[:5]}). Restore stopped before modifying the device.")
+            mark_phase("1 inject tweaks")
 
         progress_callback(100)
 
@@ -778,6 +793,7 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
         progress_callback(0)
         # === Phase 3: reconnect + restore protective backup (60-90%) ===
         merge_fallback_done = False
+        mark_phase("2 sparse restore")
         if merge_phases:
             # Merged mode: the sparse restore never rebooted, so there is no
             # security recovery to wait for — the device is still connected and
@@ -887,6 +903,7 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
                                                     prompt_choice=prompt_choice)
                         merge_fallback_done = True
                 log_info("Phase 3: Protective backup restored successfully")
+                mark_phase("3 protective restore")
 
             # === Phase 4: reboot before the media restore + setup skip (90-95%) ===
             # Swapped with the old skip-setup phase: on a merged (never-rebooted)
@@ -958,7 +975,10 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
                         f"AFC media restore failed for {len(pushed['failed'])} "
                         f"file(s) (e.g. {pushed['failed'][:3]}) — the photos on "
                         f"the device are incomplete")
-                log_info("Phase 5: Media restored over AFC")
+                log_info(f"Phase 5: Media restored over AFC "
+                         f"({pushed.get('files', 0)} pushed, "
+                         f"{pushed.get('skipped', 0)} already on the device)")
+                mark_phase("5 media push")
 
             if skip_setup:
                 if stage_callback:
@@ -996,16 +1016,6 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
                 "the tweak transfer without progress. Tweaks were not applied.") from sparse_failure
     except Exception as e:
         if backup_complete:
-            if regenerate_cache:
-                # The master was pruned + tweak-injected in place for this
-                # apply; put the pristine snapshot back so the cache stays
-                # valid for the next apply (and stays the crash-safe copy).
-                try:
-                    await asyncio.to_thread(
-                        regenerate_cache_from_snapshot,
-                        snapshot_dir, prepared_backup_root.root, udid)
-                except Exception as regen_err:
-                    log_warn(f"Cache regeneration after failure failed: {regen_err}")
             kept = backup_root if not using_cache else prepared_backup_root.root
             log_error(f"Restore failed; protective backup kept at: {kept}")
             try:
@@ -1014,25 +1024,29 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
                 pass
             raise
         log_error(f"Restore failed before backup completed: {e}")
-        if snapshot_dir:
-            # master was never modified (prune/inject only run when complete);
-            # drop only the stale snapshot
-            shutil.rmtree(snapshot_dir, ignore_errors=True)
         if protective_dir:
             shutil.rmtree(protective_dir, ignore_errors=True)
         raise
+    finally:
+        # The restore view is disposable — the master it was built from is
+        # untouched, so dropping the view never loses data.
+        if view_dir:
+            try:
+                await asyncio.to_thread(
+                    discard_restore_view, view_dir, udid)
+            except Exception as view_err:
+                log_warn(f"Could not remove the cache restore view: {view_err}")
 
-    if regenerate_cache:
-        # The master carried the injected tweaks for this apply; regenerate the
-        # cache from the snapshot, returning the master to its pristine
-        # full-manifest state for the next incremental refresh.
-        await asyncio.to_thread(
-            regenerate_cache_from_snapshot, snapshot_dir, prepared_backup_root.root, udid)
-    elif skip_protective_backup:
+    if skip_protective_backup:
         # user opted out of data protection — nothing was kept
-        shutil.rmtree(protective_dir, ignore_errors=True)
+        if protective_dir:
+            shutil.rmtree(protective_dir, ignore_errors=True)
     else:
-        log_info(f"Protective backup kept at: {protective_dir}")
+        # A cache master is kept (it is the next apply's incremental store and
+        # the recovery source); a live backup is kept at its own directory.
+        kept_at = protective_dir or (prepared_backup_root.root
+                                     if prepared_backup_root else backup_root)
+        log_info(f"Protective backup kept at: {kept_at}")
     log_info(f"iOS 27 restore completed successfully in {time.monotonic() - started:.1f}s")
     progress_callback(100)
 

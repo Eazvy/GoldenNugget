@@ -351,23 +351,57 @@ backup in the persistent app-data store
   with an empty listing (Apple's host behaviour), so the device treats the
   probe as "nothing to diff" and proceeds with a safe full rebuild instead of
   aborting the apply.
-- Restores regenerate the master after every apply: the apply **snapshots**
-  the pristine master (`make_cache_snapshot`, snapshot at
-  `<base>/snapshot/<udid>`, hardlinked payloads + real-copied metadata — the
-  metadata is real because pruning rewrites Manifest.db and a hardlink would
-  corrupt the master), then prunes and tweak-injects the master **in place**
-  (the master IS the Phase 3 restore source), and on success — or any failure
-  after the backup completed — regenerates it from the snapshot
-  (`regenerate_cache_from_snapshot`: the modified master is replaced by the
-  pristine snapshot, so the FULL manifest and pre-tweak payload states come
-  back for the next incremental refresh). The snapshot records the inject plan
-  (`inject_plan.json`) for diagnostics; a leftover snapshot left by a crashed
-  apply is self-healed on the next cache `refresh()`. Only the CACHE master
-  goes through this snapshot/regenerate cycle; a fresh Phase-0 live backup is
-  pruned **in place** in the restore (no /tmp copy to spill onto another
-  volume and OSError with ENOSPC), and the retained run IS that pruned backup.
+- The master is IMMUTABLE. An apply never prunes, tweak-injects into, or
+  moves it. Instead it builds a disposable **restore view** under
+  `<base>/view/<udid>` (`make_restore_view`): the metadata files
+  (Manifest.db/.plist, Status.plist, Info.plist) are real-copied — pruning
+  rewrites Manifest.db and a hardlink would corrupt the master — and the
+  payloads are hardlinked (near-instant, size-free; a copy fallback covers a
+  cross-device destination). The view is pruned + tweak-injected and restored
+  from, then dropped (`discard_restore_view`); dropping it frees directory
+  entries without touching a byte of payload data. The view root sits on the
+  SAME filesystem as the master on purpose, so the hardlinks stay links
+  instead of degrading into full copies.
+  Consequences: the master keeps its FULL manifest forever (which is exactly
+  what `perform_protective_backup(incremental_ok=True)` diffs against), a
+  crashed apply can no longer leave the master half-pruned, and the old
+  snapshot/regenerate cycle (and its self-heal path) is gone. A fresh
+  Phase-0 live backup is still pruned **in place** in the restore (no copy at
+  all — it is disposable, and a copy could spill onto another volume and
+  OSError with ENOSPC); the retained run IS that pruned backup.
   (`make_protective_working_copy` still exists for the manual restore tools
   `restore_cache.py` / `apply_worker.py`, which never touch the master.)
+- Freshness is tracked **per part**, not per cache:
+  - `CACHE_REFRESH_SECS` (default 1800s) — how long the master stays
+    usable without a device session.
+  - `CACHE_MEDIA_REFRESH_SECS` (default 21600s) — how long the AFC photo
+    store stays usable. Photos change far less often than preferences, and
+    re-pulling the whole media tree on every apply was the second-largest
+    cost after the Phase 5 push. When the master is still fresh but the photo
+    store has aged out, only the photos are re-pulled
+    (`ProtectiveBackupCache.refresh_media`, a diff — just the new objects
+    transfer) instead of forcing a full master refresh.
+  - The photo store's age is recorded separately in the cache's info JSON
+    (`media_ts` vs `created_ts`), so a refresh that did not touch the photos
+    does not reset their clock.
+- PosterBoard work does **not** force a master refresh. The wallpaper
+  database only needs the PosterBoard container, and the targeted
+  PosterBoard-only backup pulls exactly that (everything else the device
+  offers is drained mid-stream). The cache fast path therefore returns
+  `pb_from_cache=False` — the caller then fetches a fresh database through
+  the targeted channel instead of re-uploading the whole protective scope.
+  Forcing a refresh for it was the main reason the cache felt useless:
+  every wallpaper apply re-read the entire backup.
+- Phase 5 pushes only what the device lacks: `restore_media_via_afc` diffs
+  the store against the device's current AFC media tree (same size rule the
+  pull side uses) and transfers only missing or size-mismatched files. A
+  device that cannot list its media tree falls back to pushing everything —
+  never to skipping. The explicit recovery restores ("Restore Data From
+  Backup" / `restore_cache.py`) pass `diff=False`: there the store's copy
+  must win over whatever the device holds, even at the same size.
+- Per-phase timings are logged by `_restore_ios27` ("Phase timing — …"),
+  because without them the dominant cost of an apply was invisible — which is
+  exactly why the cache looked like it did nothing.
 - Invalidated by UDID/iOS-version change. The master ALWAYS lives in the
   persistent store (never temp): it is the only copy of user data between
   Phase 2 (device wipe) and Phase 3 (restore), so a temp placement would

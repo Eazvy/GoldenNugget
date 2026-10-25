@@ -29,7 +29,6 @@ encrypted at rest and iOS rejects them in an unencrypted backup.
 """
 
 import asyncio
-import json
 import os
 import shutil
 import sqlite3
@@ -67,6 +66,7 @@ from src.restore.inject import (  # noqa: F401  (re-exported public API)
     inject_files_into_backup,
 )
 from src.restore.protective_cache import (  # noqa: F401  (re-exported public API)
+    CACHE_MEDIA_REFRESH_SECS,
     CACHE_PERSIST_MIN_GB,
     CACHE_REFRESH_SECS,
     ProtectiveBackupCache,
@@ -80,12 +80,18 @@ class PreparedBackup:
     root: str
     manifest_password: str = ""  # required to prune/inject encrypted manifests
     # True when ``root`` is the CACHE MASTER — a pristine, incrementally
-    # refreshed store. The restore snapshots it, prunes/injects the tweaks
-    # directly into the master in place, restores from it, then regenerates the
-    # cache from the snapshot (restoring the pristine full-manifest master).
-    # False for a fresh live backup, which the restore prunes and restores from
-    # directly (no temp copy).
+    # refreshed mirror of the device that the master must never modify.
+    # The apply therefore builds a disposable *view* of it (a pruned copy of
+    # the manifest plus hardlinks to the payloads) and restores from that; the
+    # master itself stays untouched, so the next refresh still diffs against a
+    # full manifest and a crashed apply cannot leave it half-pruned.
+    # False for a fresh live backup, which the restore prunes in place (it is
+    # disposable by nature, so no copy is needed).
     master: bool = False
+    # Where the per-apply restore view is built. It must sit on the same
+    # filesystem as the master so the view's payload hardlinks stay links
+    # instead of degrading into full copies. Empty for live backups.
+    view_root: str = ""
     # Directory holding the photos/videos pulled over AFC in parallel with this
     # backup ('' when the media stayed in the mobilebackup2 backup — those
     # manifest rows ride Phase 3's protective restore). Phase 5 pushes this
@@ -1120,6 +1126,53 @@ def _copy_backup_tree(src_root: Path, dst_root: Path) -> None:
                     shutil.copy2(src_file, dst_file)
 
 
+def make_restore_view(master_root: str, udid: str, view_root: str) -> str:
+    """Build a disposable restore *view* of the cache master.
+
+    The master is the pristine copy the incremental refresh diffs against, so
+    it must never be modified by an apply. The prune and the tweak injection
+    therefore run against a view: a hardlink copy of the master's payloads
+    plus real copies of its metadata files.
+
+    The metadata is copied for real because the prune rewrites Manifest.db in
+    place — a hardlinked manifest would corrupt the master. The payloads are
+    hardlinked, which costs no disk space and no data copy; unlinking one in
+    the view leaves the master's file untouched.
+
+    ``view_root`` must live on the same filesystem as ``master_root`` so the
+    hardlinks stay links instead of degrading into full copies.
+
+    Returns the view's parent directory — the layout the restore code expects
+    (``<parent>/<udid>/Manifest.db``).
+    """
+    src_root = Path(master_root) / udid
+    if not src_root.is_dir():
+        # Tolerate a root pointing directly at the device directory.
+        if (Path(master_root) / "Manifest.db").is_file():
+            src_root = Path(master_root)
+        else:
+            raise NuggetException("Cache master is missing its payload.")
+
+    view_parent = Path(view_root)
+    view_device = view_parent / udid
+    shutil.rmtree(view_device, ignore_errors=True)
+    view_device.mkdir(parents=True, exist_ok=True)
+    _copy_backup_tree(src_root, view_device)
+    return str(view_parent)
+
+
+def discard_restore_view(view_root: str, udid: str) -> None:
+    """Remove a per-apply restore view.
+
+    The view is a disposable hardlink farm over the master, so deleting it
+    frees the directory entries without touching a single byte of payload
+    data (the master's own files stay exactly where they are).
+    """
+    if not view_root:
+        return
+    shutil.rmtree(Path(view_root) / udid, ignore_errors=True)
+
+
 def make_protective_working_copy(backup_root: str, udid: str) -> str:
     """Build a throwaway hardlink copy of a protective backup for prune + injection.
 
@@ -1144,67 +1197,21 @@ def make_protective_working_copy(backup_root: str, udid: str) -> str:
 
 
 def make_cache_snapshot(backup_root: str, udid: str, inject_files: list = None) -> str:
-    """Record the pristine state of a cache master before an apply modifies it.
+    """Deprecated: the cache master is no longer modified in place.
 
-    The cache master is both the Phase 3 restore source AND the next apply's
-    incremental-refresh store. So before pruning + tweak-injection touch the
-    master in place, this snapshots it under ``<base>/snapshot/<udid>`` (the
-    same hardlink-copy semantics as ``make_protective_working_copy``, but in
-    the persistent store next to the master — never the temp dir, since the
-    snapshot is the pristine full-manifest record that must survive a crash
-    between Phase 2's wipe and Phase 3's restore).
-
-    The files the upcoming injection will change are recorded as
-    ``inject_plan.json`` beside the snapshot for diagnostics. Returns the
-    snapshot base dir (``<base>/snapshot``).
+    Applies now build a disposable restore *view* of the master
+    (``make_restore_view``) instead of pruning and injecting the master
+    itself and then rebuilding it from a snapshot. The master therefore
+    stays pristine and there is nothing to snapshot or regenerate.
     """
-    snap_base = Path(backup_root).parent / "snapshot"
-    # Drop a stale snapshot left by a crashed run before recording a new one.
-    shutil.rmtree(snap_base, ignore_errors=True)
-    src_root = Path(backup_root) / udid
-    if not src_root.is_dir():
-        # Tolerate a root pointing directly at the device directory.
-        if (Path(backup_root) / "Manifest.db").is_file():
-            src_root = Path(backup_root)
-        else:
-            raise NuggetException("Cache master is missing its payload.")
-
-    _copy_backup_tree(src_root, snap_base / udid)
-    plan = [{"domain": f.domain, "path": f.restore_path.lstrip("/")}
-            for f in (inject_files or [])]
-    (snap_base / "inject_plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
-    return str(snap_base)
+    raise NotImplementedError(
+        "the cache master is immutable — use make_restore_view() instead")
 
 
 def regenerate_cache_from_snapshot(snapshot_dir: str, backup_root: str, udid: str) -> str:
-    """Regenerate the cache master from the snapshot taken before the apply.
-
-    The master (pruned + tweak-injected in place for this apply) is replaced by
-    the pristine snapshot: its device dir is deleted and the snapshot's is moved
-    into place — an instant rename on the same filesystem. The snapshot (and
-    its recorded inject plan) is then removed. Returns the regenerated master
-    root (``backup_root``).
-    """
-    snap_root = Path(snapshot_dir) / udid
-    if not snap_root.is_dir():
-        # Tolerate a snapshot dir pointing directly at the device directory.
-        if (Path(snapshot_dir) / "Manifest.db").is_file():
-            snap_root = Path(snapshot_dir)
-        else:
-            log_warn("Cache snapshot missing — cannot regenerate")
-            return backup_root
-    master_dev = Path(backup_root) / udid
-    if not master_dev.is_dir():
-        if (Path(backup_root) / "Manifest.db").is_file():
-            master_dev = Path(backup_root)
-        else:
-            log_warn("Cache master missing — cannot regenerate")
-            return backup_root
-    shutil.rmtree(master_dev, ignore_errors=True)
-    shutil.move(str(snap_root), str(master_dev))
-    shutil.rmtree(Path(snapshot_dir), ignore_errors=True)
-    log_info(f"Cache master regenerated from snapshot: {master_dev}")
-    return str(backup_root)
+    """Deprecated: the cache master is never modified, so nothing regenerates it."""
+    raise NotImplementedError(
+        "the cache master is immutable — it needs no regeneration")
 
 
 def verify_backup_payloads(backup_dir: "str | Path", udid: str,
