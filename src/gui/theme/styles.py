@@ -15,6 +15,10 @@ FONT_FAMILY = "Inter Variable"
 
 
 STYLES = {
+    "templates_builder_title": "font-size: 16px; font-weight: 600; color: {text_primary}; background-color: transparent;",
+    "templates_caption": "font-size: 12px; color: {text_secondary}; background-color: transparent;",
+    "templates_builder_icon": "background-color: {accent}; border-radius: 12px; font-size: 24px; color: {text_inverse};",
+    "templates_builder_chevron": "font-size: 26px; color: {text_secondary}; background-color: transparent;",
     "tweak_row_description": "color: {text_secondary}; font-size: 13px; background-color: transparent;",
     "tweak_row_label": "color: {text_primary}; font-size: 15px; background-color: transparent;",
     "onboarding_dialog": """

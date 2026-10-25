@@ -68,8 +68,8 @@ This document describes the background threads, async backup/restore operations,
   `theme_pixmap(resource, color, size, dpr)` (scales the SVG *before* tinting, so
   11x11/16x16 sources stay crisp) instead of `theme_icon()`, which rasterizes at
   the intrinsic size and would be blurry. The Home feature tiles
-  (`src/gui/ios/home.py`) are the reference use: one 68px icon per tile, all six
-  feature tiles in a single row, name + muted subtitle underneath,
+  (`src/gui/ios/home.py`) are the reference use: large icons on seven
+  feature tiles in a responsive grid, name + muted subtitle underneath,
   `_TileCard._retheme` → `t("home_tile")`.
 - **One font everywhere**: the bundled `Inter` variable font is
   registered in `main_app.py` (`QFontDatabase.addApplicationFont` +

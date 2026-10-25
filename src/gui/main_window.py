@@ -44,6 +44,7 @@ from src.gui.ios.theme_manager import ThemeManager
 from src.gui.ios.home import IOSHomePage
 from src.gui.ios.tweaks import IOSTweaksPage, IOSSectionPage
 from src.gui.ios.posterboard import IOSPosterboardPage
+from src.gui.ios.templates import IOSTemplatesPage
 from src.gui.ios.daemons import IOSDaemonsPage
 from src.gui.ios.apply import IOSApplyPage
 from src.gui.ios.settings import IOSSettingsPage
@@ -83,6 +84,7 @@ _CLASSIC_THEMED_ICONS = {
     "presetsPageBtn": ":/icon/folder.svg",
     "applyPageBtn": ":/icon/check-circle.svg",
     "posterboardPageBtn": ":/icon/features/posterboard.png",
+    "templatesPageBtn": ":/icon/file-earmark-text.svg",
     "settingsPageBtn": ":/icon/gear.svg",
     "mainDevBtn": ":/icon/github.svg",
     "discordBtn": ":/icon/discord.svg",
@@ -172,7 +174,8 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         # build the iOS-style pages stack
         # 0 = home, 1 = tweaks, 2 = posterboard, 3 = daemons, 4 = settings,
         # 5 = statusbar, 6 = apply, 7 = springboard, 8 = internal, 9 = liquidglass,
-        # 10 = icon themes, 11 = passcode themes, 12 = presets, 13 = community catalog
+        # 10 = icon themes, 11 = passcode themes, 12 = presets, 13 = community catalog,
+        # 14 = tweak templates
         self.ios_pages = QtWidgets.QStackedWidget(self)
         self.ios_pages.setStyleSheet(t("page_bg"))
         self.ios_home = IOSHomePage(self)
@@ -189,6 +192,7 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         self.ios_iconthemes = IOSIconThemesPage(self)
         self.ios_passthemes = IOSPasscodeThemePage(self)
         self.ios_catalog = IOSCatalogPage(self)
+        self.ios_templates = IOSTemplatesPage(self)
         self.ios_pages.addWidget(self.ios_home)
         self.ios_pages.addWidget(self.ios_tweaks)
         self.ios_pages.addWidget(self.ios_posterboard)
@@ -203,6 +207,7 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         self.ios_pages.addWidget(self.ios_passthemes)
         self.ios_pages.addWidget(self.ios_presets)
         self.ios_pages.addWidget(self.ios_catalog)
+        self.ios_pages.addWidget(self.ios_templates)
 
         # Shared reusable header: one instance for every iOS subpage,
         # reconfigured on page change (title / back / right action).
@@ -223,9 +228,11 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
             11: QCoreApplication.translate("Nugget", "Passcode Theme"),
             12: QCoreApplication.translate("Nugget", "Presets"),
             13: QCoreApplication.translate("Nugget", "Community Catalog"),
+            14: QCoreApplication.translate("Nugget", "Templates"),
         }
         self._nav_right_actions = {
             2: (QCoreApplication.translate("Nugget", "+ Add Tendies"), self.ios_posterboard.show_add_tendies_dialog),
+            14: (QCoreApplication.translate("Nugget", "+ Import Templates"), self.ios_templates.show_add_templates_dialog),
             11: (QCoreApplication.translate("Nugget", "+ Theme"),
                  self.ios_passthemes.choose_theme_dialog),
         }
@@ -329,6 +336,7 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         self.ui.daemonsPageBtn.clicked.connect(self.on_daemonsPageBtn_clicked)
         self.ui.iconThemesPageBtn.clicked.connect(self.on_iconThemesPageBtn_clicked)
         self.ui.posterboardPageBtn.clicked.connect(self.on_posterboardPageBtn_clicked)
+        self.ui.templatesPageBtn.clicked.connect(self.on_templatesPageBtn_clicked)
         self.ui.applyPageBtn.clicked.connect(self.on_applyPageBtn_clicked)
         self.ui.settingsPageBtn.clicked.connect(self.on_settingsPageBtn_clicked)
 

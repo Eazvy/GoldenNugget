@@ -17,7 +17,7 @@ from awesomeui.controls import (
     IOSSectionHeader,
     IOSCard,
     IOSCollapsibleSection as _CollapsibleSection,
-    IOSNavBar,
+    IOSNavBar as _NavBar,
     IOSValueRow,
     IOSSettingsRow,
     IOSSettingsAction,
@@ -56,11 +56,20 @@ class IOSCollapsibleSection(_CollapsibleSection):
         self.header.setText(f"{chevron}  {self._title.replace('&', '&&')}{self._title_suffix}")
 
 
+class IOSNavBar(_NavBar):
+    def _clear_right(self):
+        # Hide the outgoing action immediately; deferred deletion alone leaves
+        # an overlapping button visible during rapid page changes.
+        if self._right_btn is not None:
+            self._right_btn.hide()
+        super()._clear_right()
+
+
 class NavigationSidebar(Sidebar):
     """awesomeUI navigation with the existing page-controller bindings."""
 
     ITEM_NAMES = (
-        "homePageBtn", "posterboardPageBtn", "gestaltPageBtn", "euEnablerPageBtn",
+        "homePageBtn", "posterboardPageBtn", "templatesPageBtn", "gestaltPageBtn", "euEnablerPageBtn",
         "statusBarPageBtn", "passcodePageBtn", "springboardOptionsPageBtn",
         "internalOptionsPageBtn", "liquidGlassPageBtn", "daemonsPageBtn",
         "iconThemesPageBtn", "presetsPageBtn", "applyPageBtn", "settingsPageBtn",
@@ -78,6 +87,9 @@ class NavigationSidebar(Sidebar):
             old = getattr(ui, name, None)
             text = old.text() if old else QCoreApplication.translate("Nugget", "Presets")
             icon = old.icon() if old else QIcon(":/icon/folder.svg")
+            if name == "templatesPageBtn":
+                text = QCoreApplication.translate("Nugget", "Templates")
+                icon = QIcon(":/icon/file-earmark-text.svg")
             item = self.add_item(name, text, icon)
             if old is not None:
                 item.setEnabled(old.isEnabled())

@@ -123,6 +123,7 @@ class DeviceBarMixin:
             "Springboard": self.ui.springboardOptionsPageBtn,
             "Internal": self.ui.internalOptionsPageBtn,
             "PosterBoard": self.ui.posterboardPageBtn,
+            "Templates": self.ui.templatesPageBtn,
             "Daemons": self.ui.daemonsPageBtn,
         }
         for feat, btn in btn_map.items():
@@ -131,6 +132,7 @@ class DeviceBarMixin:
         # iOS home cards
         card_map = {
             "PosterBoard": self.ios_home.posterboard_card,
+            "Templates": self.ios_home.templates_card,
             "Daemons": self.ios_home.daemons_card,
         }
         for feat, card in card_map.items():
@@ -461,8 +463,7 @@ class DeviceBarMixin:
                 if len(tweaks[TweakID.PosterBoard].tendies) > 0:
                     self.show_ios_page(2)
                 elif len(tweaks[TweakID.Templates].templates) > 0:
-                    # templates have no dedicated page in the unified shell
-                    self.show_ios_page(2)
+                    self.show_ios_page(14)
                 self._sync_sidebar_selection()
         else:
             self.device_manager.set_current_device(index=None)
@@ -782,7 +783,7 @@ class NavigationMixin:
             self.ui.liquidGlassPageBtn, self.ui.daemonsPageBtn,
             self.ui.applyPageBtn, self.ui.settingsPageBtn,
             self.ui.statusBarPageBtn, self.ui.iconThemesPageBtn,
-            self.ui.presetsPageBtn)
+            self.ui.presetsPageBtn, self.ui.templatesPageBtn)
         page_to_btn = {
             0: 0,   # home
             2: 1,   # posterboard
@@ -795,6 +796,7 @@ class NavigationMixin:
             5: 8,   # status bar
             10: 9,  # icon themes
             12: 10, # presets
+            14: 11, # templates
         }
         idx = None
         if self.theme_manager.current_theme == ThemeManager.CLASSIC:
@@ -1022,6 +1024,10 @@ class NavigationMixin:
 
     def on_posterboardPageBtn_clicked(self):
         self.show_ios_page(2)
+        self._sync_sidebar_selection()
+
+    def on_templatesPageBtn_clicked(self):
+        self.show_ios_page(14)
         self._sync_sidebar_selection()
 
 

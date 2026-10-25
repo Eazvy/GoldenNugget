@@ -76,17 +76,48 @@ class AwesomeUIIntegration(unittest.TestCase):
                     self.assertFalse(settings.value('ui/show_sidebar', True, type=bool))
                     self.assertEqual(window.ios_pages.currentIndex(), 4)
                     for index, name in ((0, 'homePageBtn'), (4, 'settingsPageBtn'),
-                                        (12, 'presetsPageBtn'), (6, 'applyPageBtn')):
+                                        (12, 'presetsPageBtn'), (6, 'applyPageBtn'),
+                                        (14, 'templatesPageBtn'), (2, 'posterboardPageBtn')):
                         getattr(window.ui, name).click()
                         APP.processEvents()
                         self.assertEqual(window.ios_pages.currentIndex(), index)
                         self.assertEqual(window.ui.sidebar.current_item_id(), name)
                         self.assertIs(getattr(window.ui, name), window.ui.sidebar.item(name))
+                    self.assertIs(window.ios_pages.widget(14), window.ios_templates)
+                    self.assertEqual(window.ios_posterboard.tab_stack.count(), 2)
+                    window.ios_posterboard.video_tab_btn.click()
+                    self.assertIs(window.ios_posterboard.tab_stack.currentWidget(),
+                                  window.ios_posterboard.video_page)
+                    self.assertFalse(hasattr(window.ios_posterboard, 'templates_tab_btn'))
+                    self.assertEqual(len(window.ios_home._tiles), 7)
+                    for card, index in ((window.ios_home.posterboard_card, 2),
+                                        (window.ios_home.templates_card, 14)):
+                        card.mousePressEvent(None)
+                        APP.processEvents()
+                        self.assertEqual(window.ios_pages.currentIndex(), index)
+                    self.assertEqual(window.ios_nav.title_lbl.text(), 'Templates')
+                    import_action = window.ios_nav._right_btn
+                    with patch.object(window.ios_templates, 'show_add_templates_dialog') as import_templates:
+                        window._nav_right_actions[14] = ('+ Import Templates', import_templates)
+                        window._update_shared_nav(14)
+                        self.assertTrue(import_action.isHidden())
+                        window.ios_nav._right_btn.click()
+                        import_templates.assert_called_once_with()
+                    window._nav_right_actions[14] = ('+ Import Templates',
+                                                     window.ios_templates.show_add_templates_dialog)
                     with patch('src.gui.main_window_mixins._hidden_feature_names',
                                return_value={'PosterBoard', 'Daemons'}):
                         window._apply_hidden_feature_gating()
                     self.assertTrue(window.ui.posterboardPageBtn.isHidden())
                     self.assertTrue(window.ui.daemonsPageBtn.isHidden())
+                    self.assertFalse(window.ui.templatesPageBtn.isHidden())
+                    self.assertFalse(window.ios_home.templates_card.isHidden())
+                    with patch('src.gui.main_window_mixins._hidden_feature_names',
+                               return_value={'Templates'}):
+                        window._apply_hidden_feature_gating()
+                    self.assertTrue(window.ui.templatesPageBtn.isHidden())
+                    self.assertTrue(window.ios_home.templates_card.isHidden())
+                    self.assertFalse(window.ios_home.posterboard_card.isHidden())
                     # Hidden sidebars must catch up when they become visible.
                     ColorThemeManager.instance().set_accent('purple')
                     window.ui.sidebar.show()
@@ -114,7 +145,14 @@ class AwesomeUIIntegration(unittest.TestCase):
                             window.run_first_launch_prompts()
                             picker.assert_called_once_with(window)
                     if os.environ.get('GOLDENNUGGET_UI_SCREENSHOT'):
-                        window.grab().save(os.environ['GOLDENNUGGET_UI_SCREENSHOT'])
+                        path = Path(os.environ['GOLDENNUGGET_UI_SCREENSHOT'])
+                        with patch('src.gui.main_window_mixins._hidden_feature_names', return_value=set()):
+                            window._apply_hidden_feature_gating()
+                        window.resize(1200, 850)
+                        for index, suffix in ((0, ''), (14, '-templates'), (2, '-posterboard')):
+                            window.set_ios_page(index, animate=False)
+                            APP.processEvents()
+                            window.grab().save(str(path.with_stem(path.stem + suffix)))
                 finally:
                     window.close()
                     window.deleteLater()

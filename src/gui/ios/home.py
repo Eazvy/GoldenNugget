@@ -1,6 +1,6 @@
 import time
 from PySide6.QtCore import (
-    Qt, QCoreApplication, Slot, QTimer, QSize, QEvent, Signal, QThread,
+    Qt, QCoreApplication, QT_TRANSLATE_NOOP, Slot, QTimer, QSize, QEvent, Signal, QThread,
 )
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import (
@@ -108,7 +108,7 @@ class _CardGrid(QWidget):
     """Keep visible home tiles in their final row, including before first show."""
     MIN_CARD_WIDTH = 140
     SPACING = 12
-    MAX_COLUMNS = 6
+    MAX_COLUMNS = 7
 
     def __init__(self, cards, parent=None):
         super().__init__(parent)
@@ -415,7 +415,9 @@ class IOSHomePage(QWidget):
         self.control_tabs.currentChanged.connect(self._on_control_tab_changed)
 
         cards_row = [self._make_card(
-            "PosterBoard", "Animated wallpapers & templates", 2),
+            "PosterBoard", QT_TRANSLATE_NOOP("Nugget", "Animated wallpapers & video"), 2),
+            self._make_card(
+            "Templates", QT_TRANSLATE_NOOP("Nugget", "Custom tweaks from .batter files"), 14),
             self._make_card(
             "Tweaks", "Customize system settings", 1),
             self._make_card(
@@ -426,11 +428,11 @@ class IOSHomePage(QWidget):
             "Icon Themes", "Themed app icons & labels", 10),
             self._make_card(
             "Passcode Theme", "Custom keypad theme (.passthm)", 11)]
-        (self.posterboard_card, _, self.daemons_card,
+        (self.posterboard_card, self.templates_card, _, self.daemons_card,
          self.statusbar_card, _, self.passcode_theme_card) = cards_row
         self.cards_grid = _CardGrid(cards_row)
         layout.addWidget(self.cards_grid)
-        # a slim row instead of a seventh tile, so the six tiles keep one row
+        # Keep the catalog as a compact row below the feature tiles.
         self.catalog_card = self._make_catalog_row()
         layout.addWidget(self.catalog_card)
 
@@ -1061,7 +1063,8 @@ class IOSHomePage(QWidget):
 
         icon_res = FEATURE_ICONS.get(title, ":/icon/compass.svg")
         icon_lbl = QLabel(card)
-        icon_lbl.setFixedSize(140, 128)
+        # A 140px tile has 120px of content after its horizontal margins.
+        icon_lbl.setFixedSize(_CardGrid.MIN_CARD_WIDTH - 20, 128)
         icon_lbl.setAlignment(Qt.AlignCenter)
         # transparent, so the label never paints the palette window color over
         # the tile (see the home_tile_* styles)
@@ -1153,19 +1156,15 @@ class IOSHomePage(QWidget):
             FEATURE_ICONS["PosterBoard"]: 126,
         }
         artwork = theme_pixmap(icon_res, self._c.text_primary,
-                               sizes.get(icon_res, 100), dpr)
-        offsets = {
-            FEATURE_ICONS["Tweaks"]: -14,
-            FEATURE_ICONS["Icon Themes"]: 9,
-        }
-        offset = offsets.get(icon_res, 0)
+                               min(sizes.get(icon_res, 100),
+                                   label.width() - 8, label.height() - 8), dpr)
         canvas = QPixmap(round(label.width() * dpr), round(label.height() * dpr))
         canvas.setDevicePixelRatio(dpr)
         canvas.fill(Qt.GlobalColor.transparent)
         painter = QPainter(canvas)
         width = artwork.width() / artwork.devicePixelRatioF()
         height = artwork.height() / artwork.devicePixelRatioF()
-        painter.drawPixmap(round((label.width() - width) / 2 + offset),
+        painter.drawPixmap(round((label.width() - width) / 2),
                            round((label.height() - height) / 2), artwork)
         painter.end()
         label.setPixmap(canvas)

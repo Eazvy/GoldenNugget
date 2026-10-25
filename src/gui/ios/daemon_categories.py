@@ -64,8 +64,6 @@ DAEMON_CATEGORIES = {'Diagnostics': 'Reports & Diagnostics',
  'WebBookmarks': 'Accounts & Cloud',
  'FollowUp': 'Accounts & Cloud',
  'AssistiveTouch': 'Accessibility & Controls',
- 'NanoTimeKit': 'Connections & Devices',
- 'AppleWatchNano': 'Connections & Devices',
  'HealthKit': 'System Services'}
 
 CATEGORY_ORDER = ('Apps & Media', 'Connections & Devices', 'Siri & Intelligence', 'Accounts & Cloud', 'Accessibility & Controls', 'Reports & Diagnostics', 'System Services', 'Risky tweaks')
