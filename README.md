@@ -292,11 +292,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [LEGACY] Old translations were crowdsourced using [Nugget POEditor][POEditorJoin]. Thank you everyone who assisted in the translation effort!
 - [PosterRestore][PosterRestoreDiscord] for their help with PosterBoard
   - Special thanks to [dootskyre][dootskyreX], [Middo][MiddoX], [dulark][dularkGitHub], forcequitOS, and pingubow for their work on nugget. It would not have been possible without them!
-  - Thanks to [Snoolie for aar handling][python-aar-stuffGitHub]!
+  - Thanks to [Snoolie][SnoolieGitHub] for aar handling!
 - [iTechExpert][iTechExpertTwitter] for various Springboard/Internal Options
 - [Mikasa-san][Mikasa-sanGitHub] for [Quiet Daemon][QuietDaemonGitHub]
-- [pymobiledevice3][pymobiledevice3GitHub] for restoring and device algorithms.
-- [PySide6][PySide6Doc] for the GUI library.
+- [MiniVoidyy][MiniVoidyyGitHub] for the additional system and analytics daemon lists.
+- [doronz88][doronz88GitHub] for pymobiledevice3's restoring and device algorithms.
+- [Qt Company][QtGitHub] for the PySide6 GUI library.
+- [mattisklein][mattiskleinGitHub] for the Siri AI eligibility archives from Project Linwood.
 
 [caplayground]: https://caplayground.vercel.app/wallpapers
 [i18n]: https://github.com/awesomenull-dev/gNugget-i18n
@@ -313,23 +315,23 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 [ReadMoreGist]: https://gist.github.com/leminlimez/c602c067349140fe979410ef69d39c28
 [Wind0ws11Aero]: https://github.com/Wind0ws11Aero
 [POEditorJoin]: https://poeditor.com/join/project/UTqpVSE2UD
-[JJTechGitHub]: https://github.com/JJTech0130
-[TrollStoreGitHub]: https://github.com/JJTech0130/TrollRestore
 [PosterRestoreDiscord]: https://discord.gg/gWtzTVhMvh
 [dootskyreX]: https://x.com/dootskyre
 [MiddoX]: https://x.com/MWRevamped
 [dularkGitHub]: https://github.com/dularkian
 [SerStarsX]: https://x.com/SerStars_lol
-[disfordottieX]: https://x.com/disfordottie
 [Mikasa-sanGitHub]: https://github.com/Mikasa-san
 [QuietDaemonGitHub]: https://github.com/Mikasa-san/QuietDaemon
-[sneakyf1shyGitHub]: https://github.com/f1shy-dev
+[MiniVoidyyGitHub]: https://github.com/MiniVoidyy
+[doronz88GitHub]: https://github.com/doronz88
+[QtGitHub]: https://github.com/qt
+[SnoolieGitHub]: https://github.com/0xilis
 [lrdsnowGitHub]: https://github.com/Lrdsnow
 [EUEnablerGitHub]: https://github.com/Lrdsnow/EUEnabler
 [pymobiledevice3GitHub]: https://github.com/doronz88/pymobiledevice3
 [PySide6Doc]: https://doc.qt.io/qtforpython-6/
 [python-aar-stuffGitHub]: https://github.com/0xilis/python-aar-stuff
-[AIEligibilityGist]: https://gist.github.com/f1shy-dev/23b4a78dc283edd30ae2b2e6429129b5
+[mattiskleinGitHub]: https://github.com/mattisklein
 [bl_sbxGitHub]: https://github.com/khanhduytran0/bl_sbx/tree/main
 [DuyGitHub]: https://github.com/khanhduytran0
 [HuyTwitter]: https://x.com/Little_34306
