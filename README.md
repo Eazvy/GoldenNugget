@@ -2,7 +2,6 @@
 
 # GoldenNugget
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Offline tests](https://github.com/GoldenNugget-Team/GoldenNugget/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GoldenNugget-Team/GoldenNugget/actions/workflows/tests.yml)
 
 [Download](https://github.com/GoldenNugget-Team/GoldenNugget/releases/latest) · [Wiki](https://github.com/GoldenNugget-Team/GoldenNugget/wiki) · [Report a bug](https://github.com/GoldenNugget-Team/GoldenNugget/issues/new/choose) · [Discussions](https://github.com/GoldenNugget-Team/GoldenNugget/discussions)
 
@@ -286,6 +285,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [awesomenull] Lead developer
 - [Wind0ws11Aero] for helping with development a lot.
 - [kik4311] Co-developer
+- [mekabrine][mekabrineDiscord] for the logo and app icon artwork.
+- [Eazvy][EazvyGitHub] for interface improvements and the home feature artwork.
+- [Lucide contributors][LucideGitHub] for the interface icons.
+- [Rasmus Andersson][rsmsGitHub] for the Inter font.
 - Translations crowdsourced using [gNugget-i18n repository][i18n]
 - [LeminLimez] for creating Nugget.
 - [0xjonhnnydev] for [AirLift]
@@ -293,11 +296,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [PosterRestore][PosterRestoreDiscord] for their help with PosterBoard
   - Special thanks to [dootskyre][dootskyreX], [Middo][MiddoX], [dulark][dularkGitHub], forcequitOS, and pingubow for their work on nugget. It would not have been possible without them!
   - Thanks to [Snoolie][SnoolieGitHub] for aar handling!
+- [SerStars][SerStarsGitHub] for the wallpaper website.
 - [iTechExpert][iTechExpertTwitter] for various Springboard/Internal Options
 - [Mikasa-san][Mikasa-sanGitHub] for [Quiet Daemon][QuietDaemonGitHub]
 - [MiniVoidyy][MiniVoidyyGitHub] for the additional system and analytics daemon lists.
 - [doronz88][doronz88GitHub] for pymobiledevice3's restoring and device algorithms.
 - [Qt Company][QtGitHub] for the PySide6 GUI library.
+- [FFmpeg contributors][FFmpegGitHub] and [Karl Kroening][kkroeningGitHub] for video processing and the ffmpeg-python bindings.
+- [OpenCV contributors][OpenCVGitHub] for image and video decoding.
+- [pillow-heif contributors][pillowHeifGitHub] for HEIF image decoding on Linux.
 - [mattisklein][mattiskleinGitHub] for the Siri AI eligibility archives from Project Linwood.
 
 [caplayground]: https://caplayground.vercel.app/wallpapers
@@ -325,6 +332,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 [MiniVoidyyGitHub]: https://github.com/MiniVoidyy
 [doronz88GitHub]: https://github.com/doronz88
 [QtGitHub]: https://github.com/qt
+[mekabrineDiscord]: https://discord.com/users/1196529222617923660
+[EazvyGitHub]: https://github.com/Eazvy
+[LucideGitHub]: https://github.com/lucide-icons
+[rsmsGitHub]: https://github.com/rsms
+[SerStarsGitHub]: https://github.com/SerStars
+[FFmpegGitHub]: https://github.com/FFmpeg
+[kkroeningGitHub]: https://github.com/kkroening
+[OpenCVGitHub]: https://github.com/opencv
+[pillowHeifGitHub]: https://github.com/bigcat88
 [SnoolieGitHub]: https://github.com/0xilis
 [lrdsnowGitHub]: https://github.com/Lrdsnow
 [EUEnablerGitHub]: https://github.com/Lrdsnow/EUEnabler
