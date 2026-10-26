@@ -680,5 +680,3 @@ class LiquidDock(GlassPanel):
             self.window.liquid.position_device()
             if self.window.liquid.settings.isVisible():
                 self.window.liquid.settings.reposition()
-
-

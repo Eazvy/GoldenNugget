@@ -135,4 +135,3 @@ class DevicePeek(QWidget):
         lip.setColorAt(1,QColor(255,255,255,60))
         p.setBrush(lip)
         p.drawRoundedRect(QRectF(12,self.height()-14,self.width()-24,7),4,4)
-
