@@ -124,7 +124,7 @@ class PayloadTests(unittest.TestCase):
         from src.restore.inject import inject_files_into_backup
         from src.restore.protective import clean_backup_for_restore, verify_backup_payloads
         device = backup_fixture(self.root / "backup")
-        row = ("HomeDomain", "Library/Application Support/kept.bin", b"keep", 0o100644, 501, 501)
+        row = ("HomeDomain", "Library/Preferences/kept.plist", b"keep", 0o100644, 501, 501)
         inject_files_into_backup(device.parent, "udid", [row])
         orphan = device / "aa" / "unreferenced"
         orphan.parent.mkdir(exist_ok=True)

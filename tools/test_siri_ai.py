@@ -174,7 +174,6 @@ class SiriAITests(unittest.TestCase):
         enable, reset = SiriAITweak(), SiriAITweak('reset')
         enable.set_enabled(True)
         manager = SimpleNamespace(
-            get_current_device_udid=lambda: 'offline',
             get_current_device_version=lambda: '27.0',
             get_current_device_model=lambda: 'iPhone17,1',
             _disable_unavailable_controls=lambda _: set(),

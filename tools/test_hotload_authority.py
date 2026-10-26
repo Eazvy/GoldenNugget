@@ -54,7 +54,6 @@ class HotLoadAuthority(unittest.TestCase):
 
     def test_master_off_payload_contains_only_remote_overrides(self):
         manager = SimpleNamespace(
-            get_current_device_udid=lambda: 'offline',
             pref_manager=SimpleNamespace(settings=None, supervised=False, organization_name=""),
             get_current_device_version=lambda: '27.0',
             get_current_device_model=lambda: 'iPhone13,2',
