@@ -151,6 +151,13 @@ hide whole broken features. Behaviours per rule `action`:
   (`confirm_flagged` in the iOS tweaks/daemons/preset pages).
 - `"kill_app"` — **kill switch**: the app refuses to start (or shuts itself
   down) on matching setups (`main_app._hotload_kill_or_none`).
+- `"badNews"` — **mandatory update**: shows an application-modal update dialog
+  for matching setups, from cached rules at startup and after a rules refresh
+  or device change. No Later button, Escape or window-close dismissal; opening
+  the download leaves the app blocked until it is restarted with an unaffected
+  version. Optional `version` names the available release and `reason` explains
+  the requirement. Scope with `app_versions` or `max_app_version` so the updated
+  build is not blocked. Honours `hotload_enabled` like the other actions.
 - `"hide_feature"` (`feature` field) — **hide a whole feature page**: the
   feature's tweaks are never applied, removed from the iOS UI
   (`_hidden_sections` in `src/gui/ios/tweaks.py`), its Sidebar button and iOS

@@ -13,6 +13,7 @@ class StartupServices(QObject):
         self.window, self.manager, self.hotload = window, manager, hotload
         self.log, self.kill_rule, self.show_kill = logger, kill_rule, show_kill
         self.closing = Event()
+        self._required_update_dialog = None
         app.aboutToQuit.connect(self.closing.set)
         self.update_ready.connect(self._apply_update)
         self.rules_ready.connect(self._apply_rules)
@@ -21,6 +22,8 @@ class StartupServices(QObject):
         self.timer.timeout.connect(self._check_kill)
 
     def start(self):
+        # Enforce cached rules immediately, including when the network is down.
+        self._check_kill()
         Thread(target=self._fetch_update, name="startup-update", daemon=True).start()
         Thread(target=self._fetch_rules, name="startup-safety", daemon=True).start()
         self.timer.start()
@@ -64,3 +67,13 @@ class StartupServices(QObject):
                 self.show_kill(kill)
             # Preserve the configured kill-switch policy, after any GUI notice.
             os._exit(1)
+        if self.closing.is_set() or self._required_update_dialog is not None:
+            return
+        rule = self.hotload.bad_news_rule(
+            self.manager.get_current_device_version() or None,
+            self.manager.get_current_device_model() or None)
+        if rule:
+            from src.gui.dialogs.update_dialog import UpdateDialog
+            self._required_update_dialog = UpdateDialog(self.window, required=True, rule=rule)
+            # show() preserves ApplicationModal; open() would change it to WindowModal.
+            self._required_update_dialog.show()

@@ -31,6 +31,9 @@ KILL_SWITCH_KEY = "hotload_enabled"
 # the matching iOS versions / device types ("remote kill switch").
 KILL_ACTION = "kill_app"
 
+# Require an update before the matching app/device setup can be used again.
+BAD_NEWS_ACTION = "badNews"
+
 # A rule with action == HIDE_ACTION hides a whole feature (page) — its tweaks
 # disappear from the UI, its Sidebar button and iOS home card are hidden, and
 # presets refuse to load it. Scoped to iOS versions / device types like the
@@ -160,7 +163,7 @@ class HotLoad:
         tweak_name = getattr(tweak_id, "name", str(tweak_id))
         for rule in self._rules.get("rules", []):
             try:
-                if rule.get("tweak") != tweak_name or rule.get("action") == RISK_ACTION:
+                if rule.get("tweak") != tweak_name or rule.get("action") in (RISK_ACTION, BAD_NEWS_ACTION):
                     continue
                 if not self._rule_applicable(rule, device_version, device_model, app_version):
                     continue
@@ -186,6 +189,20 @@ class HotLoad:
                 if not self._rule_applicable(rule, device_version, device_model, app_version):
                     continue
                 return rule
+            except Exception:
+                continue
+        return None
+
+    def bad_news_rule(self, device_version=None, device_model=None,
+                      app_version=None) -> Optional[dict]:
+        """First matching mandatory-update rule, respecting the HotLoad switch."""
+        if not self.is_enabled():
+            return None
+        for rule in self._rules.get("rules", []):
+            try:
+                if rule.get("action") == BAD_NEWS_ACTION and self._rule_applicable(
+                        rule, device_version, device_model, app_version):
+                    return rule
             except Exception:
                 continue
         return None
