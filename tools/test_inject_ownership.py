@@ -73,6 +73,20 @@ def make_pruned_backup(root: Path, udid: str) -> Path:
         "INSERT INTO Files VALUES (?, ?, ?, ?, ?)",
         (hashlib.sha1(b"HomeDomain-Library/SpringBoard").hexdigest(),
          "HomeDomain", "Library/SpringBoard", 2, dir_blob))
+    for index,(domain,relative,owner) in enumerate((
+            ('DatabaseDomain','com.apple.xpc.launchd/disabled.plist',0),
+            ('ManagedPreferencesDomain','mobile/com.apple.springboard.plist',501))):
+        contents=plistlib.dumps({})
+        archive=plistlib.loads(dir_blob)
+        archive['$objects'][1].update(UserID=owner,GroupID=owner,Mode=0o100644,
+                                      Size=len(contents),InodeNumber=30+index)
+        archive['$objects'][2]=relative
+        fid=hashlib.sha1(f'{domain}-{relative}'.encode()).hexdigest()
+        destination=dev/fid[:2]/fid
+        destination.parent.mkdir(exist_ok=True)
+        destination.write_bytes(contents)
+        conn.execute('INSERT INTO Files VALUES (?,?,?,?,?)',
+                     (fid,domain,relative,1,plistlib.dumps(archive,fmt=plistlib.FMT_BINARY)))
     conn.commit()
     conn.close()
     return dev
@@ -149,10 +163,10 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         dev = make_pruned_backup(Path(tmp), "UDID")
         inject(Path(tmp), "UDID", [
-            ("HomeDomain", "Library/Preferences/com.apple.fake.plist",
+            ("HomeDomain", "Library/Application Support/com.apple.fake.plist",
              plistlib.dumps({"K": 1}), _FileMode.S_IFREG | 0o644, None, None)])
         info = read_rows(dev)[
-            ("HomeDomain", "Library/Preferences/com.apple.fake.plist", 1)]
+            ("HomeDomain", "Library/Application Support/com.apple.fake.plist", 1)]
         check("owner=None falls back to 501",
               (info["UserID"], info["GroupID"]) == (501, 501),
               f"uid={info['UserID']} gid={info['GroupID']}")

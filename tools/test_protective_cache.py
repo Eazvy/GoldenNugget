@@ -20,6 +20,7 @@ from src.restore.protective import (
     make_protective_working_copy,
     regenerate_cache_from_snapshot,
 )
+from src.restore.protective_cache import CACHE_FILTER_REVISION
 
 UDID = "00008101-TESTUDID"
 PASS = 0
@@ -93,7 +94,8 @@ def main():
     import json
     base.mkdir(parents=True, exist_ok=True)
     with open(cache.info_path, "w") as f:
-        json.dump({"udid": UDID, "product_version": "27.0"}, f)
+        json.dump({"udid": UDID, "product_version": "27.0",
+                   "filter_revision": CACHE_FILTER_REVISION}, f)
     check("master valid after marker", cache.has_valid_master())
 
     other = ProtectiveBackupCache(UDID, product_version="26.2")

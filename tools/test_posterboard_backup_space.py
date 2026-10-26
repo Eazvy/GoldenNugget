@@ -117,6 +117,9 @@ class PosterBoardStorage(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, *args):
                 return False
 
+            async def get_will_encrypt(self):
+                return False
+
             async def backup(self, **kwargs):
                 owner.calls.append(kwargs)
                 root = Path(kwargs["backup_directory"])

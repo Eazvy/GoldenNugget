@@ -84,15 +84,14 @@ class AwesomeUIIntegration(unittest.TestCase):
                         self.assertEqual(window.ui.sidebar.current_item_id(), name)
                         self.assertIs(getattr(window.ui, name), window.ui.sidebar.item(name))
                     self.assertIs(window.ios_pages.widget(14), window.ios_templates)
-                    self.assertEqual(window.ios_posterboard.tab_stack.count(), 2)
+                    self.assertEqual(window.ios_posterboard.tab_stack.count(), 3)
                     window.ios_posterboard.video_tab_btn.click()
                     self.assertIs(window.ios_posterboard.tab_stack.currentWidget(),
                                   window.ios_posterboard.video_page)
                     self.assertFalse(hasattr(window.ios_posterboard, 'templates_tab_btn'))
-                    self.assertEqual(len(window.ios_home._tiles), 7)
-                    for card, index in ((window.ios_home.posterboard_card, 2),
-                                        (window.ios_home.templates_card, 14)):
-                        card.mousePressEvent(None)
+                    self.assertEqual(len(window.ios_home._tiles), 6)
+                    for index in (2,14):
+                        window.bottom_navigation.navigate(index)
                         APP.processEvents()
                         self.assertEqual(window.ios_pages.currentIndex(), index)
                     self.assertEqual(window.ios_nav.title_lbl.text(), 'Templates')
@@ -111,12 +110,12 @@ class AwesomeUIIntegration(unittest.TestCase):
                     self.assertTrue(window.ui.posterboardPageBtn.isHidden())
                     self.assertTrue(window.ui.daemonsPageBtn.isHidden())
                     self.assertFalse(window.ui.templatesPageBtn.isHidden())
-                    self.assertFalse(window.ios_home.templates_card.isHidden())
+                    self.assertNotIn('Templates',window.bottom_navigation._hidden_features)
                     with patch('src.gui.main_window_mixins._hidden_feature_names',
                                return_value={'Templates'}):
                         window._apply_hidden_feature_gating()
                     self.assertTrue(window.ui.templatesPageBtn.isHidden())
-                    self.assertTrue(window.ios_home.templates_card.isHidden())
+                    self.assertIn('Templates',window.bottom_navigation._hidden_features)
                     self.assertFalse(window.ios_home.posterboard_card.isHidden())
                     # Hidden sidebars must catch up when they become visible.
                     ColorThemeManager.instance().set_accent('purple')
