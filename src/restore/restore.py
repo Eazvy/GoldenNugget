@@ -21,6 +21,7 @@ from src.devicemanagement.progress_status import OperationStatus
 
 from . import backup, perform_restore, reboot_device
 from src.utils.file_to_restore import FileToRestore, _FileMode
+from src.utils.preference_reset import PreferenceKeyReset
 from .lastapply import is_ios27_scaffolding, load_lastapply, sparse_signature
 from .skip_setup27 import skip_all_setup27
 from .afc_media import (
@@ -52,7 +53,7 @@ from pymobiledevice3.services.mobilebackup2 import Mobilebackup2Service
 from pymobiledevice3.exceptions import ConnectionTerminatedError, PasswordRequiredError, InvalidServiceError, CloudConfigurationAlreadyPresentError
 
 from src.exceptions.nugget_exception import NuggetException
-from src.exceptions.device_errors import is_transient_restore_error, is_find_my_error
+from src.exceptions.device_errors import is_transient_restore_error, is_find_my_error, is_icloud_restore_in_progress
 from src.exceptions.device_errors import is_connection_error, is_device_lock_required_error, is_device_locked_error
 
 def concat_regular_file(file: FileToRestore, files_list: list[FileToRestore], last_domain: str, last_path: str):
@@ -117,6 +118,13 @@ def merge_duplicates(original_files: list[FileToRestore]) -> list[FileToRestore]
             restore_path = restore_path.removeprefix('/')
         file_loc += restore_path
         if file_loc in existing_locations:
+            previous = no_dupe_files[existing_locations[file_loc]]
+            if isinstance(previous.contents, PreferenceKeyReset) or isinstance(file.contents, PreferenceKeyReset):
+                if not (isinstance(previous.contents, PreferenceKeyReset)
+                        and isinstance(file.contents, PreferenceKeyReset)):
+                    raise ValueError('Cannot combine preference writes and resets for the same file.')
+                previous.contents = PreferenceKeyReset(previous.contents.paths + file.contents.paths)
+                continue
             if not restore_path.endswith('.plist'):
                 print(f'cannot merge duplicate file, ignoring {file_loc}')
                 continue
@@ -333,7 +341,8 @@ def _start_mobilebackup2(lc: LockdownClient) -> Mobilebackup2Service:
 async def _restore_protective_backup(lc: LockdownClient, backup_root: str,
                                       udid: str, reboot: bool,
                                       progress_callback, backup_password: str = "",
-                                      skip_apps: bool = True) -> None:
+                                      skip_apps: bool = True,
+                                      copy_backup: bool = True) -> None:
     """Phase 3: restore the pruned protective backup.
 
     Retries while SpringBoard / mobilebackup2 are still coming up after the
@@ -363,7 +372,7 @@ async def _restore_protective_backup(lc: LockdownClient, backup_root: str,
         async with _start_mobilebackup2(client) as mb:
             await mb.restore(
                 backup_root,
-                system=True, copy=True, remove=False,
+                system=True, copy=copy_backup, remove=False,
                 reboot=reboot, source=udid,
                 skip_apps=skip_apps,
                 progress_callback=report_progress,
@@ -409,6 +418,8 @@ async def _restore_protective_backup(lc: LockdownClient, backup_root: str,
         )
 
     def _on_failure(e: Exception) -> None:
+        if is_icloud_restore_in_progress(e):
+            raise NuggetException('The iPhone reports an iCloud restore in progress. Wait for it to finish before retrying. Existing protective backups are retained.') from e
         if isinstance(e, ApplyCancelledError):
             raise e
         # Like Nugget-Mobile, classify Find My from the restore failure text;
@@ -881,6 +892,7 @@ async def _restore_ios27(back: backup.Backup, reboot: bool,
         # apply the master is regenerated from this snapshot.
         snapshot_dir = await disk_call(
             make_cache_snapshot, prepared_backup_root.root, udid, list(inject_files or []))
+        log_info('Cache recovery snapshot prepared; the restore will reuse the source without creating another dated archive')
         backup_root = prepared_backup_root.root
         # No protective_dir: a cache master must never be rmtree'd (it is the
         # incremental store + the only copy of user data between Phase 2 and 3).
@@ -1088,6 +1100,8 @@ async def restore_files(files: list[FileToRestore], reboot: bool = False, lockdo
                      "impossible (MBErrorDomain/205); falling back to sparse "
                      "restore delivery")
     from src.tweaks.siri_ai import require_protective_delivery
+    if any(isinstance(file.contents, PreferenceKeyReset) for file in sorted_files) and not inject_all:
+        raise NuggetException('Targeted preference reset requires an unencrypted protective backup. No reset was started.')
     require_protective_delivery(sorted_files, inject_all)
     inject_files = []
     for file in sorted_files:

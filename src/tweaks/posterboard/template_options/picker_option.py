@@ -4,7 +4,7 @@ from . import TemplateOption
 import os
 from typing import Optional
 from shutil import rmtree, move
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox
+from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout
 
 from src.qt.custom_elements.multicombobox import MultiComboBox
 
@@ -88,7 +88,8 @@ class PickerOption(TemplateOption):
             pickerDrp.updateText()
             pickerDrp.setStyleSheet("QWidget { background-color: #3b3b3b; border: 2px solid #3b3b3b; border-radius: 5px; }")
         else:
-            pickerDrp = QComboBox(picker_widget)
+            from src.gui.liquid.choice_editor import GlassComboBox
+            pickerDrp = GlassComboBox(picker_widget)
             for opt in self.options:
                 pickerDrp.addItem(opt.label)
             pickerDrp.setCurrentIndex(self.selection)

@@ -27,6 +27,7 @@ from src.tweaks.status_bar.status_bar_tweak import StatusBarTweak
 from src.tweaks.status_bar.status_bar_c.status_setter import ffi as status_ffi
 from src.tweaks.icon_themes.icon_themes_tweak import IconThemesTweak
 from src.tweaks.icon_themes.icon_theme import IconTheme
+from src.tweaks.posterboard.device_overrides import PosterKitOverrides
 from src.controllers.hotload import HotLoad
 
 PRESETS_DIR_NAME = "Presets"
@@ -147,11 +148,53 @@ class PresetManager:
 
     def save_snapshot(self, name, snapshot, description="", tags=None,
                       device_model="", ios_version="", *, should_commit=None):
+        if name == 'AutoSave':
+            return self.save_preset(name, description, tags, device_model, ios_version,
+                                    _data=snapshot, _should_commit=should_commit)
         return self.repository.save_snapshot(name, snapshot, description, tags,
                                               device_model, ios_version, should_commit=should_commit)
 
     def save_preset(self, name: str, description: str = "", tags: list = None,
                     device_model: str = "", ios_version: str = "", *, _data=None, _should_commit=None) -> bool:
+        try:
+            data = self._serialize() if _data is None else _data
+        except Exception as error:
+            self.last_transfer_error = f'Could not serialize configuration: {error}'
+            return False
+        if data is None:
+            return False
+
+        # Add metadata
+        now = int(time.time())
+        meta = {
+            "version": PRESET_VERSION,
+            "description": description or "",
+            "device_model": device_model or "Unknown",
+            "ios_version": ios_version or "Unknown",
+            "created_at": now,
+            "updated_at": now,
+            "tags": tags or [],
+        }
+        # Preserve original creation time if updating
+        existing_meta = self.get_preset_metadata(name)
+        if existing_meta and "created_at" in existing_meta:
+            meta["created_at"] = existing_meta["created_at"]
+
+        data["metadata"] = meta
+
+        file_path = self.get_preset_path(name)
+        if name == 'AutoSave':
+            from src.controllers.autosave_store import write_autosave
+            try:
+                if _should_commit is not None and not _should_commit():
+                    return False
+                self._autosave_baseline = write_autosave(
+                    file_path, data, getattr(self, '_autosave_baseline', None))
+                self.last_transfer_error = ''
+                return True
+            except Exception as error:
+                self.last_transfer_error = f'Could not save AutoSave: {error}'
+                return False
         try:
             snapshot = self.snapshot() if _data is None else _data
             if snapshot is None:
@@ -175,7 +218,11 @@ class PresetManager:
             return False
         if preview_only and not self._valid_import_structure(data):
             return False
-        return self._apply(data, preview_only=preview_only)
+        loaded = self._apply(data, preview_only=preview_only)
+        if loaded and name == 'AutoSave' and not preview_only:
+            from copy import deepcopy
+            self._autosave_baseline = deepcopy(self._serialize()['tweaks'])
+        return loaded
 
     def delete_preset(self, name: str) -> bool:
         return self.repository.delete_preset(name)
@@ -349,6 +396,7 @@ class PresetManager:
 
     ## SERIALIZATION
     def _serialize(self) -> dict:
+        self._load_all_tweaks()
         tweaks = _selection_store(self)
         tweak_data = {}
         for key, tweak in tweaks.items():
@@ -359,7 +407,7 @@ class PresetManager:
             try:
                 tweak_data[key.name] = self._serialize_tweak(tweak)
             except Exception as e:
-                raise ValueError(f"Could not serialize tweak {key.name}: {e}") from e
+                raise ValueError(f"Failed to serialize tweak {key}: {e}") from e
 
         return {
             "tweaks": tweak_data
@@ -370,8 +418,8 @@ class PresetManager:
         if isinstance(tweak, AdvancedPlistTweak):
             # Store only what the UI exposes / what would actually apply.
             data["value"] = tweak._filter_keys(tweak.value)
-        elif isinstance(tweak, BasicPlistTweak):
-            data["value"] = tweak.value
+        elif isinstance(tweak, (BasicPlistTweak,PosterKitOverrides)):
+            data["value"] = copy.deepcopy(tweak.value)
         elif isinstance(tweak, TemplatesTweak):
             data["templates"] = [t.path for t in tweak.templates]
             states = tweak.tweak_states()
@@ -442,7 +490,7 @@ class PresetManager:
                 # Drop keys not available in the UI (e.g. unknown daemons), so
                 # a stored preset can never re-enable hidden ones.
                 tweak.value = tweak._filter_keys(data["value"])
-        elif isinstance(tweak, BasicPlistTweak):
+        elif isinstance(tweak, (BasicPlistTweak,PosterKitOverrides)):
             if "value" in data:
                 tweak.value = data["value"]
         elif isinstance(tweak, TemplatesTweak):
