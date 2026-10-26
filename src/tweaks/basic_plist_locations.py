@@ -8,6 +8,7 @@ class FileLocation(Enum):
     
     # SpringBoard Options
     springboard = "/var/Managed Preferences/mobile/com.apple.springboard.plist"
+    springboardPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
     footnote = "/var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/SharedDeviceConfiguration.plist"
     airdrop = "/var/Managed Preferences/mobile/com.apple.sharingd.plist"
     nanoregistry = "/var/mobile/Library/Preferences/com.apple.NanoRegistry.plist"
@@ -39,6 +40,31 @@ class FileLocation(Enum):
     # Daemons
     disabledDaemons = "/var/db/com.apple.xpc.launchd/disabled.plist"
     screentime = "/var/mobile/Library/Preferences/com.apple.ScreenTimeAgent.plist"
+
+    chronodPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.chronod.plist"
+    prototypeToolsPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.PrototypeTools.plist"
+    uikitPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.UIKit.plist"
+    carrierBundleOverlay = "/var/mobile/Library/Carrier Bundles/Overlay"
+    keyboardPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.keyboard.preferences.plist"
+    keyboardContinuousPath = "/var/mobile/Library/Preferences/com.apple.keyboard.ContinuousPath.plist"
+    locationPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.locationd.plist"
+    swiftuiPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.SwiftUI.plist"
+    accessibilityPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.Accessibility.plist"
+    applicationAccess = "/var/Managed Preferences/mobile/com.apple.applicationaccess.plist"
+    celestialPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.celestial.plist"
+    mobilecalPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.mobilecal.plist"
+    apsPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.apsd.plist"
+    avatarPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.AvatarUI.Staryu.plist"
+    suggestionsPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.suggestions.plist"
+    locationStatusBarPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.locationd.StatusBarIconManager.plist"
+    preferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.Preferences.plist"
+    imdPersistencePreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.imdpersistence.IMDPersistenceAgent.plist"
+    diagnosticExtensionTracker = "/var/mobile/Library/Preferences/com.apple.DiagnosticExtensions.extensionTracker.plist"
+    spotlightUIPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.spotlightui.plist"
+    adPlatformsPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.AdPlatforms.plist"
+    itunesstoredPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.itunesstored.plist"
+    coreSpotlightUIPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.corespotlightui.plist"
+    backgroundSystemTaskPreferencesHomeDomain = "/var/mobile/Library/Preferences/com.apple.bg.system.task.plist"
 
     # Accessibility
     # Managed so the single key is merged on top of the user's own AX prefs

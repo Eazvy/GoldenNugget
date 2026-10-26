@@ -107,7 +107,7 @@ def _save_if(args, dm=None):
 
 def _spec_data(spec, tweak):
     return dict(id=spec.id.name, section=spec.section.value, kind=spec.kind.value,
-                plist=spec.location.value, key=spec.key, default=spec.value,
+                plist=spec.location.value if spec.location is not None else None, key=spec.key, default=spec.value,
                 enabled=bool(tweak and tweak.enabled), value=tweak.value if tweak else None,
                 min_ios=spec.min_version, max_ios=spec.max_version,
                 iphone_only=spec.iphone_only, ipad_only=spec.ipad_only, disabled=spec.disabled)
@@ -164,7 +164,7 @@ def _run_show(args):
     print(f"id:        {spec.id.name}")
     print(f"section:   {spec.section.value}")
     print(f"kind:      {spec.kind.value}")
-    print(f"plist:     {spec.location.value}")
+    print(f"plist:     {spec.location.value if spec.location is not None else 'Research only'}")
     print(f"key:       {spec.key or '<factory>'}")
     print(f"default:   {spec.value!r}")
     if spec.min_version:

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox
 )
 from PySide6.QtGui import QPixmap, QIcon, QImageReader
+from src.gui.liquid.choice_editor import GlassComboBox as QComboBox
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 from src.gui.widgets import (
@@ -206,6 +207,10 @@ class IOSPosterboardPage(QWidget):
         # Video tab
         self.video_page = self._create_video_tab()
         self.tab_stack.addWidget(self.video_page)
+        from src.gui.ios.tweaks import IOSSectionPage
+        from src.tweaks.registry import Section
+        self.preferences_page=IOSSectionPage(window,Section.POSTERBOARD)
+        self.tab_stack.addWidget(self.preferences_page)
 
         # Tab bar on top, sharing its row with "Check Package…": a mobile-style
         # bottom bar sat in the middle of the window, above the reset footer,
@@ -222,6 +227,8 @@ class IOSPosterboardPage(QWidget):
 
         tab_layout.addWidget(self.tendies_tab_btn)
         tab_layout.addWidget(self.video_tab_btn)
+        self.preferences_tab_btn=self._make_tab_button(self.tr('Preferences'),':/icon/wallpaper.svg',2)
+        tab_layout.addWidget(self.preferences_tab_btn)
         tab_layout.addStretch()
         tab_layout.addWidget(self._check_btn)
 
@@ -249,7 +256,7 @@ class IOSPosterboardPage(QWidget):
         self._tab_bar.setStyleSheet(
             f"QWidget#pbTabBar {{ background-color: {c.bg_primary}; }}"
         )
-        for btn in (self.tendies_tab_btn, self.video_tab_btn):
+        for btn in (self.tendies_tab_btn, self.video_tab_btn,self.preferences_tab_btn):
             btn.setStyleSheet(f"""
                 QToolButton {{
                     background: transparent;
@@ -371,11 +378,12 @@ class IOSPosterboardPage(QWidget):
         self.tab_stack.setCurrentIndex(index)
         self.tendies_tab_btn.setChecked(index == 0)
         self.video_tab_btn.setChecked(index == 1)
+        self.preferences_tab_btn.setChecked(index == 2)
         self._update_tab_icons()
 
     def _update_tab_icons(self):
         c = ColorThemeManager.instance().colors
-        for button in (self.tendies_tab_btn, self.video_tab_btn):
+        for button in (self.tendies_tab_btn, self.video_tab_btn,self.preferences_tab_btn):
             color = c.accent if button.isChecked() else c.text_secondary
             button.setIcon(QIcon(theme_pixmap(button.property('icon_resource'), color, 18, self.devicePixelRatioF())))
 

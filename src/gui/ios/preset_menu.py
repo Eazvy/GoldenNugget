@@ -125,7 +125,7 @@ def daemon_compat_warning(name: str, meta, window) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def load_preset_flow(parent, window, pm: PresetManager, name: str,
-                     display_name: str = None) -> bool:
+                     display_name: str = None, *, restart: bool = True) -> bool:
     """Confirm, safety-check, load *name*, then restart. True if loaded."""
     shown_name = display_name or name
     meta = pm.get_preset_metadata(name)
@@ -188,6 +188,8 @@ def load_preset_flow(parent, window, pm: PresetManager, name: str,
     if save_autosave is not None:
         save_autosave()
     window._sync_settings()
+    if not restart:
+        return True
     QMessageBox.information(
         parent, _T("Nugget", "Load Preset"),
         _T("Nugget",

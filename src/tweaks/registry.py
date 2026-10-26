@@ -16,12 +16,16 @@ from .tweak_names import TweakID
 
 
 class Section(Enum):
+    POSTERBOARD = "PosterBoard"
     LIQUID_GLASS = "Liquid Glass"
     SPRINGBOARD = "SpringBoard"
     INTERNAL = "Internal Options"
 
 
 class Kind(Enum):
+    POSTER_ARCHIVE = "poster_archive"
+    WALLPAPER = "wallpaper"
+    POSTER_FLAG = "poster_flag"
     SWITCH = "switch"   # boolean toggle
     TEXT = "text"       # free-form text value
     NUMBER = "number"   # numeric value
@@ -31,6 +35,7 @@ class Kind(Enum):
 # FEATURE_TWEAKS so every registry tweak automatically joins its feature;
 # the Sidebar uses the same keys to know which page owns a section.
 SECTION_FEATURES: dict[Section, str] = {
+    Section.POSTERBOARD: "PosterBoard",
     Section.LIQUID_GLASS: "Liquid Glass",
     Section.SPRINGBOARD: "Springboard",
     Section.INTERNAL: "Internal",
@@ -61,6 +66,7 @@ class TweakSpec:
     requires_always_on: bool = False
     bundle_identifier: bool = False
     unavailable_reason: Optional[str] = None
+    show_when_unavailable: bool = False
     factory: Optional[Callable[[], object]] = None  # overrides BasicPlistTweak
     description: Optional[str] = None  # detailed "what it does" tooltip
     experimental: bool = False
@@ -156,6 +162,20 @@ def _siri_ai(action):
 
 
 SPECS: tuple[TweakSpec, ...] = (
+    _t(TweakID.PosterKitOverrides, Section.POSTERBOARD, 'PosterKit Wallpaper Settings',
+       FileLocation.springboardPreferencesHomeDomain, 'PosterKitOverrides', value={},
+       kind=Kind.POSTER_ARCHIVE, experimental=True, min_version='27.0',
+       description='Edits selected fields in existing device wallpaper archives. Applies to all matching configurations. Experimental; not all styles honor every field.'),
+    *(_t(member, Section.POSTERBOARD, title, FileLocation.springboardPreferencesHomeDomain,
+         member.name, value={'none': {
+             'SBWallpaperHasVideoKey': False, 'SBWallpaperMagnifyEnabledKey': False,
+             'SBWallpaperParallaxFactorKey': 1, 'SBWallpaperPortraitKey': True,
+             'SBWallpaperStillTimeInVideoKey': 0, 'SBWallpaperSupportsCroppingKey': False,
+             'SBWallpaperZoomScaleKey': 1, 'kSBProceduralWallpaperHomeUserSetKey': False,
+         }}, kind=Kind.WALLPAPER, experimental=True,
+         description='Writes the selected wallpaper dictionary to SpringBoard preferences. Current iOS behavior is unverified.')
+      for member,title in ((TweakID.SBHomeScreenWallpapers,'Home Screen Wallpaper Preferences'),
+                           (TweakID.SBLockScreenWallpapers,'Lock Screen Wallpaper Preferences'))),
     # AXSettings key observed in iOS 27.0.1 (24A446). Managed delivery still
     # needs device validation; leave the user's setting alone until selected.
     _t(TweakID.LimitDisplayRefreshRate, Section.INTERNAL, 'Limit Frame Rate to 60 FPS',
@@ -734,13 +754,15 @@ SPECS: tuple[TweakSpec, ...] = (
        'Dark Mode Glass Thresholds', GP,
        "AdaptiveGlassHysteresisDarkRangeArray",
        value="", kind=Kind.TEXT,
-       description='Hidden glass thresholds. The required text format is unknown.',
+       unavailable_reason='Numeric array format and accepted thresholds are not verified. Free-form text must not be applied.',
+       description='Unavailable: the numeric array format and valid thresholds need verification.',
        min_version="27.0"),
     _t(TweakID.AdaptiveGlassHysteresisLightRange, Section.LIQUID_GLASS,
        'Light Mode Glass Thresholds', GP,
        "AdaptiveGlassHysteresisLightRangeArray",
        value="", kind=Kind.TEXT,
-       description='Hidden glass thresholds. The required text format is unknown.',
+       unavailable_reason='Numeric array format and accepted thresholds are not verified. Free-form text must not be applied.',
+       description='Unavailable: the numeric array format and valid thresholds need verification.',
        min_version="27.0"),
     _t(TweakID.CalistogaLargeRefraction, Section.LIQUID_GLASS,
        'Stronger Background Distortion', GP, "CalistogaLargeRefraction",
@@ -1073,7 +1095,29 @@ SPECS: tuple[TweakSpec, ...] = (
        description='Plays a sound when pasting copied content.'),
     _t(TweakID.AnnounceAllPastes, Section.INTERNAL, 'Show More Paste Notices', FileLocation.pasteboard, "AnnounceAllPastes",
        description='Shows extra notices when the system accesses copied content.'),
+    _t(TweakID.DisableCollectionViewPrefetching, Section.INTERNAL,
+       'Disable Collection View Prefetching', FileLocation.uikitPreferencesHomeDomain,
+       'CollectionViewCellPrefetchingMode', value=-2, min_version='27.0', experimental=True,
+       description='Requests disabling collection-view cell prefetching using the reported internal UIKit preference.',
+       warning='Reader and integer -2 are user-reported for iOS 27.0, not independently verified here. Retail restore delivery and visible effects are unverified. May worsen scrolling or loading; battery and performance gains are not established. Disabling omits future writes and does not remove an applied override.'),
+    _t(TweakID.DisableSwiftUIScrollPrefetch, Section.INTERNAL,
+       'Disable SwiftUI Scroll Prefetching', FileLocation.swiftuiPreferencesHomeDomain,
+       'EnableScrollPrefetch', value=False, min_version='27.2', experimental=True,
+       factory=lambda: _experimental_domain_boolean(
+           FileLocation.swiftuiPreferencesHomeDomain, 'EnableScrollPrefetch', False, True),
+       description='Requests disabling SwiftUI scroll prefetching. This may increase loading or scrolling delays.',
+       warning="The Boolean reader is traced in iOS 27.2 RC, but device delivery, accepted overrides and visible effects are unverified. Battery or performance gains are not established. Turning this off writes true for the key; that may not restore the device's prior value."),
+    _t(TweakID.TableViewCellPrefetchingModeResearch, Section.INTERNAL,
+       'Disable Table View Prefetching', FileLocation.uikitPreferencesHomeDomain,
+       'TableViewCellPrefetchingMode', value=-1, min_version='27.0', experimental=True,
+       description='Requests disabling table-view cell prefetching using the reported internal UIKit preference.',
+       warning='Reader, shared UIKit suite and integer -1 are user-reported for iOS 27.0, not independently verified here. Retail restore delivery and visible effects are unverified. May worsen scrolling or loading; battery and performance gains are not established. Disabling omits future writes and does not remove an applied override.'),
 )
+
+from .local_catalog import SPECS as LOCAL_SPECS
+_existing_ids={spec.id for spec in SPECS}
+SPECS=SPECS+tuple(spec for spec in LOCAL_SPECS if spec.id not in _existing_ids)
+LOCAL_ONLY_IDS=frozenset(spec.id for spec in SPECS if spec.id not in _existing_ids)
 
 SPECS_BY_SECTION = {section: [s for s in SPECS if s.section == section and not s.disabled] for section in Section}
 SPECS_BY_ID = {spec.id: spec for spec in SPECS if not spec.disabled}
@@ -1114,6 +1158,8 @@ def managed_pref_app_plists() -> frozenset:
     """
     out = {managed_pref_target(FileLocation.ota.value)}
     for spec in SPECS:
+        if spec.location is None:
+            continue
         target = managed_pref_target(spec.location.value)
         if target is not None:
             out.add(target)

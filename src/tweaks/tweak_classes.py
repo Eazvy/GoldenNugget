@@ -5,6 +5,9 @@ from .basic_plist_locations import FileLocation
 
 _legacy_unsubscribe = None
 
+def suspend_tweak_notifications():
+    return default_changes.suspend()
+
 def subscribe_tweak_changes(callback):
     return default_changes.subscribe(callback)
 
@@ -80,20 +83,54 @@ class BasicPlistTweak(Tweak):
         return other_tweaks
 
 
+class WallpaperPreferencesTweak(BasicPlistTweak):
+    def apply_tweak(self, other_tweaks):
+        if not self.enabled:
+            return other_tweaks
+        from copy import deepcopy
+        from math import isfinite
+        value=deepcopy(self.value)
+        for key in ('SBWallpaperHasVideoKey','SBWallpaperMagnifyEnabledKey',
+                    'SBWallpaperPortraitKey','SBWallpaperSupportsCroppingKey',
+                    'kSBProceduralWallpaperHomeUserSetKey'):
+            old=value['none'][key]
+            if type(old) not in (bool,int) or old not in (False,True):
+                raise ValueError(f'Expected a boolean wallpaper field: {key}')
+            value['none'][key]=bool(old)
+        for key,lower,upper in (('SBWallpaperParallaxFactorKey',0,100),
+                                ('SBWallpaperStillTimeInVideoKey',0,86400),
+                                ('SBWallpaperZoomScaleKey',.01,100)):
+            number=value['none'][key]
+            if type(number) not in (int,float) or not isfinite(number) or not lower<=number<=upper:
+                raise ValueError(f'Invalid numeric wallpaper field: {key}')
+        other_tweaks.setdefault(self.file_location,{})[self.key]=value
+        return other_tweaks
+
+
 class ReversibleBooleanPlistTweak(BasicPlistTweak):
     """Write both states so disabling a previously applied key takes effect."""
 
-    def __init__(self, file_location, key, *, integer_value=False):
-        super().__init__(file_location, key)
+    def __init__(self, file_location, key, *, integer_value=False, companion_keys=()):
+        super().__init__(file_location, key, value=None)
         self.integer_value = integer_value
+        self.companion_keys = tuple(companion_keys)
+
+    def set_enabled(self, value: bool):
+        value = bool(value)
+        if self.enabled != value:
+            self.value = value
+        super().set_enabled(value)
 
     def apply_tweak(self, other_tweaks: dict, force_disabled: bool = False) -> dict:
+        if not self.enabled and self.value is None and not force_disabled:
+            return other_tweaks
         target = other_tweaks.get(self.file_location)
         if not isinstance(target, dict):
             target = {}
             other_tweaks[self.file_location] = target
         value = False if force_disabled else bool(self.enabled)
-        target[self.key] = int(value) if self.integer_value else value
+        for key in (self.key, *self.companion_keys):
+            target[key] = int(value) if self.integer_value else value
         return other_tweaks
 
 class ExperimentalBooleanPlistTweak(ReversibleBooleanPlistTweak):
@@ -265,4 +302,149 @@ class DaemonPlistTweak(AdvancedPlistTweak):
             target["MobileAssetSUAllowOSVersionChange"] = False
         else:
             target.pop("MobileAssetSUAllowOSVersionChange", None)
+        return other_tweaks
+
+
+class TriStateBooleanPlistTweak(BasicPlistTweak):
+    def __init__(self, file_location, key, on_value=True, *, owner=501, group=501):
+        super().__init__(file_location, key, value=None, owner=owner, group=group)
+        self.on_value = on_value
+        self.off_value = not on_value if isinstance(on_value, bool) else 1 - on_value
+
+    @property
+    def state(self):
+        return self.value == self.on_value if self.enabled else None
+
+    def set_state(self, state, *, notify=True):
+        if state is not None and type(state) is not bool:
+            raise ValueError("A boolean preference state must be true, false, or unused.")
+        self.enabled = state is not None
+        self.value = None if state is None else self.on_value if state else self.off_value
+        if notify:
+            self._change_bus.notify()
+
+    def set_enabled(self, value: bool):
+        self.set_state(True if value else None)
+
+    def set_value(self, new_value, toggle_enabled=True):
+        if new_value is None:
+            self.set_state(None)
+            return
+        if type(new_value) not in (bool, int) or new_value not in (0, 1):
+            raise ValueError("A boolean preference requires true or false.")
+        state = new_value == self.on_value
+        if toggle_enabled:
+            self.set_state(state)
+        else:
+            self.value = self.on_value if state else self.off_value
+            self._change_bus.notify()
+
+class ResearchOnlyTweak(Tweak):
+    def __init__(self, key, reason):
+        super().__init__(key=key, value=None)
+        self.reason = reason
+
+    def set_enabled(self, value):
+        if value:
+            raise ValueError(self.reason)
+        super().set_enabled(False)
+
+    def set_value(self, new_value, toggle_enabled=True):
+        if new_value is not None or toggle_enabled:
+            raise ValueError(self.reason)
+
+    def apply_tweak(self, *args, **kwargs):
+        raise ValueError(self.reason)
+
+class GlassLegibilityTweak(BasicPlistTweak):
+    def __init__(self):
+        super().__init__(FileLocation.uikitPreferencesHomeDomain, "UIViewGlassLegibilitySetting", value=0)
+
+    def apply_tweak(self, other_tweaks: dict) -> dict:
+        if not self.enabled:
+            return other_tweaks
+        if type(self.value) not in (int, float) or self.value not in (0, 1):
+            raise ValueError("Glass legibility appearance must be 0 or 1.")
+        other_tweaks.setdefault(self.file_location, {})[self.key] = int(self.value)
+        return other_tweaks
+
+class FeatureFlagTweak(TriStateBooleanPlistTweak):
+    def __init__(self, category, names, on_value=True):
+        self.flag_category = category
+        self.flag_names = tuple(names)
+        super().__init__(FileLocation.featureflags, self.flag_names[0], on_value)
+
+    def apply_tweak(self, other_tweaks: dict) -> dict:
+        if not self.enabled:
+            return other_tweaks
+        domain = other_tweaks.setdefault(self.file_location, {}).setdefault(self.flag_category, {})
+        for name in self.flag_names:
+            domain.setdefault(name, {})["Enabled"] = self.value
+        return other_tweaks
+
+class GlassFeatureFlagTweak(FeatureFlagTweak):
+    pass
+
+def _write_uikit_internal_preference(other_tweaks, key, value):
+    for location in (FileLocation.uikit, FileLocation.uikitPreferencesHomeDomain):
+        other_tweaks.setdefault(location, {})[key] = value
+    flags = other_tweaks.setdefault(FileLocation.featureflags, {})
+    flags.setdefault("UIKit", {}).setdefault("UIPreferences", {})["Enabled"] = True
+    return other_tweaks
+
+class UIKitInternalBooleanTweak(TriStateBooleanPlistTweak):
+    def __init__(self, key):
+        super().__init__(FileLocation.uikitPreferencesHomeDomain, key)
+
+    def apply_tweak(self, other_tweaks: dict) -> dict:
+        if not self.enabled:
+            return other_tweaks
+        return _write_uikit_internal_preference(other_tweaks, self.key, self.value)
+
+class UIKitInternalScrollDurationTweak(BasicPlistTweak):
+    def __init__(self, key, value):
+        super().__init__(FileLocation.uikitPreferencesHomeDomain, key, value=value)
+
+    def apply_tweak(self, other_tweaks: dict) -> dict:
+        if not self.enabled:
+            return other_tweaks
+        if type(self.value) not in (int, float) or not 0 <= self.value <= 1:
+            raise ValueError("Scrolling duration must be between 0 and 1 second.")
+        return _write_uikit_internal_preference(other_tweaks, self.key, float(self.value))
+
+class DirectionalScrollDurationTweak(UIKitInternalScrollDurationTweak):
+    def __init__(self):
+        super().__init__("DirectionalScrollAnimationDuration", 0.3)
+
+class DiscreteScrollDurationTweak(UIKitInternalScrollDurationTweak):
+    def __init__(self):
+        super().__init__("DiscreteScrollAnimationDuration", 0.067)
+
+class UIKitAnimationScaleTweak(BasicPlistTweak):
+    def __init__(self):
+        super().__init__(FileLocation.uikit, "UIAnimationDragCoefficient", value=1.0)
+
+    def apply_tweak(self, other_tweaks: dict) -> dict:
+        if not self.enabled:
+            return other_tweaks
+        if type(self.value) not in (int, float) or not 0.1 <= self.value <= 3.0:
+            raise ValueError("Animation duration scale must be between 0.1 and 3.")
+        for location in (self.file_location, FileLocation.uikitPreferencesHomeDomain):
+            other_tweaks.setdefault(location, {})[self.key] = float(self.value)
+        flags = other_tweaks.setdefault(FileLocation.featureflags, {})
+        flags.setdefault("UIKit", {}).setdefault("UIPreferences", {})["Enabled"] = True
+        return other_tweaks
+
+class DisableDynamicIslandTweak(ReversibleBooleanPlistTweak):
+    def __init__(self):
+        super().__init__(FileLocation.springboard, "SBSuppressDynamicIslandCompletely",
+                         companion_keys=("SBNeverRenderSystemApertureFillOnGPU",
+                                         "SBSSystemApertureDisabled"))
+
+    def apply_tweak(self, other_tweaks: dict, force_disabled: bool = False) -> dict:
+        super().apply_tweak(other_tweaks, force_disabled)
+        if 'SBSSystemApertureDisabled' not in other_tweaks.get(self.file_location, {}):
+            return other_tweaks
+        value = other_tweaks[self.file_location]["SBSSystemApertureDisabled"]
+        other_tweaks.setdefault(FileLocation.springboardPreferencesHomeDomain, {})["SBSSystemApertureDisabled"] = value
         return other_tweaks

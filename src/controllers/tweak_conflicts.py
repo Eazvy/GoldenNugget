@@ -1,5 +1,6 @@
 """Offline checks for contradictory plist selections, not a device safety audit."""
 from dataclasses import dataclass
+from copy import deepcopy
 import plistlib
 
 from PySide6.QtCore import QCoreApplication, QT_TRANSLATE_NOOP
@@ -7,6 +8,8 @@ from PySide6.QtCore import QCoreApplication, QT_TRANSLATE_NOOP
 from src.tweaks.registry import SPECS_BY_ID
 from src.tweaks.tweak_classes import BasicPlistTweak, AdvancedPlistTweak, NullifyFileTweak
 from src.tweaks.tweak_names import TweakID
+from src.tweaks.candidate_preferences import InstalledAppSuggestionsBlacklist
+from src.tweaks.store import ChangeBus
 
 
 @dataclass(frozen=True)
@@ -29,17 +32,23 @@ def find_conflicts(selections):
 
     Basic/companion writers merge keys; advanced writers replace the whole
     dictionary. Their apply methods operate on fresh local dictionaries only.
-    Wallpaper/template generators and device operations are never invoked.
+    Wallpaper/template generators and device-dependent app-list writers are
+    never invoked. Preview writers run on copies so review cannot consume state.
     """
     writers = {}
     conflicts = []
     for tid, tweak in selections.items():
         if not tweak.enabled:
             continue
+        if isinstance(tweak, InstalledAppSuggestionsBlacklist):
+            continue
         if isinstance(tweak, NullifyFileTweak):
             payload = None
         elif isinstance(tweak, BasicPlistTweak):
-            payload = tweak.apply_tweak({})[tweak.file_location]
+            preview = deepcopy(tweak, {id(tweak._change_bus): ChangeBus()})
+            payload = preview.apply_tweak({}).get(tweak.file_location)
+            if payload is None:
+                continue
         else:
             continue
         location = tweak.file_location

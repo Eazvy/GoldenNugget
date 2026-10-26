@@ -183,6 +183,7 @@ class IOSDaemonsContent(QWidget):
         self.search.setPlaceholderText(self.tr("Search daemons…"))
         self.filter_control = IOSSegmentedFilter([
             (self.tr("All"), "all"), (self.tr("Enabled"), "enabled"),
+            (self.tr("Disabled"), "disabled"),
             (self.tr("Favorites"), "favorites")], self)
         self.filter_control.setAccessibleName(self.tr("Daemon filter"))
         search_row = QHBoxLayout()
@@ -269,6 +270,7 @@ class IOSDaemonsContent(QWidget):
         self._rows._layout.setEnabled(False)
         self._rows.setEnabled(False)
         self._loading_label = QLabel(self.tr("Loading controls…"), self)
+        self._loading_label.hide()
         layout.addWidget(self._loading_label)
         self._category_lines = []
         self._category_groups = []
@@ -412,6 +414,9 @@ class IOSDaemonsContent(QWidget):
         from src.gui.ios.daemon_categories import CATEGORY_ORDER, DAEMON_CATEGORIES, REPORTS_CATEGORY, ACCOUNTS_CATEGORY
         grouped = {title: [] for title in CATEGORY_ORDER}
         for card, (daemon, switch) in zip(self.daemon_cards, self.daemon_switches):
+            if any(key in self.daemons_tweak.never_enable for key in daemon.value):
+                card.hide()
+                continue
             category = "Risky tweaks" if card in self._risky_cards else REPORTS_CATEGORY if daemon in ANALYTICS_DAEMONS else DAEMON_CATEGORIES.get(daemon.name, "System Services")
             card.setProperty("searchText", f'{self.tr(category)} {card.property("searchText")}')
             grouped[category].append(card)
@@ -439,6 +444,9 @@ class IOSDaemonsContent(QWidget):
             separator.setFixedHeight(1)
             self._category_lines.append(separator)
             group_layout.addWidget(separator)
+            from src.gui.liquid.cards import ControlGrid, prepare_card
+            grid = ControlGrid()
+            group_layout.addLayout(grid)
             if title == REPORTS_CATEGORY:
                 self._analytics_group = group
                 master = IOSCard()
@@ -458,9 +466,10 @@ class IOSDaemonsContent(QWidget):
                 self.analytics_switch.toggled.connect(self._toggle_all_analytics)
                 row.addWidget(self.analytics_switch)
                 _reserve_action_space(row)
-                group_layout.addWidget(master)
+                prepare_card(master)
+                grid.addWidget(master)
             for card in sorted(cards, key=lambda row: str(row.property("sortTitle")).casefold()):
-                group_layout.addWidget(card)
+                grid.addWidget(card)
                 card.show()
             self._rows.append(group)
             self._category_groups.append((group, cards))
@@ -501,9 +510,12 @@ class IOSDaemonsContent(QWidget):
         operations = []
         visibility = {}
         for card, (daemon, switch) in zip(self.daemon_cards, self.daemon_switches):
-            visible = self.search.matches(card.property("searchText"))
+            visible = (not any(key in self.daemons_tweak.never_enable for key in daemon.value)
+                       and self.search.matches(card.property("searchText")))
             if mode == "enabled":
                 visible = visible and switch.isChecked()
+            elif mode == "disabled":
+                visible = visible and not switch.isChecked()
             elif mode == "favorites":
                 visible = visible and "daemon:" + daemon.name in favorites
             operations.append((card, visible))
@@ -565,7 +577,8 @@ class IOSDaemonsContent(QWidget):
         from src.gui.ios.feature_news import add_new_badge
         add_new_badge(row_layout, "daemon:" + daemon.name, card)
         row_layout.addWidget(switch)
-        favorite = QPushButton(self)
+        from src.gui.liquid.controls import FavoriteButton
+        favorite = FavoriteButton(self)
         favorite.setFixedSize(_FAVORITE_SIZE, _FAVORITE_SIZE)
         favorite.setCheckable(True)
         favorite.setIconSize(QSize(23, 23))
@@ -613,6 +626,8 @@ class IOSDaemonsContent(QWidget):
             self._forced_notes.append(note)
             row_layout.insertWidget(row_layout.indexOf(switch), note)
 
+        from src.gui.liquid.selection_card import bind_selection_card
+        bind_selection_card(card,switch, favorite_feedback=True)
         row = self._viewport_rows.wrap(card)
         row.setParent(self._rows)
         row.hide()
@@ -641,7 +656,7 @@ class IOSDaemonsContent(QWidget):
         colors = ColorThemeManager.instance().colors
         button.setIcon(QIcon(theme_pixmap(
             ":/icon/star-fill.svg" if selected else ":/icon/star.svg",
-            colors.accent if selected else colors.text_secondary, 23,
+            '#d6b967' if selected else colors.text_secondary, 23,
             self.devicePixelRatioF())))
         button.blockSignals(False)
 
@@ -828,6 +843,13 @@ class IOSDaemonsContent(QWidget):
         """Resync every switch with the current tweak state."""
         if getattr(self, "_building", False):
             return
+        signature = (self.daemons_tweak.enabled,
+                     tuple(sorted((self.daemons_tweak.value or {}).items())),
+                     getattr(getattr(self, 'screen_time_tweak', None), 'enabled', False))
+        if (signature == getattr(self, '_refresh_signature', None)
+                and self.master_switch.isChecked() == self.daemons_tweak.enabled):
+            return
+        self._refresh_signature = signature
         self.master_switch.blockSignals(True)
         self.master_switch.setChecked(self.daemons_tweak.enabled)
         self.master_switch.blockSignals(False)
@@ -835,9 +857,10 @@ class IOSDaemonsContent(QWidget):
 
         for daemon, switch in self.daemon_switches:
             value = self.daemons_tweak.value.get(daemon.value[0], False) if self.daemons_tweak.value else False
-            switch.blockSignals(True)
-            switch.setChecked(value)
-            switch.blockSignals(False)
+            if switch.isChecked() != value:
+                switch.blockSignals(True)
+                switch.setChecked(value)
+                switch.blockSignals(False)
 
         if hasattr(self, "screen_time_switch"):
             self.screen_time_switch.blockSignals(True)
@@ -892,13 +915,15 @@ class IOSDaemonsPage(QWidget):
         self.content = None
         layout.addWidget(scroll)
 
-    def prepare_content(self):
+    def prepare_content(self, *, finish=True):
         if self.content is None:
             self.content = IOSDaemonsContent(self.window, self)
             self._scroll.setWidget(self.content)
+        if finish:
+            self.content._builder.finish()
 
     def showEvent(self, event):
-        self.prepare_content()
+        self.prepare_content(finish=False)
         super().showEvent(event)
         self.refresh_from_tweaks()
 

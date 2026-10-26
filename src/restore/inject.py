@@ -23,6 +23,7 @@ import os
 import plistlib
 import sqlite3
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
@@ -31,8 +32,168 @@ from .mbfile import MBFileArchive, InvalidMBFile
 from src.exceptions.nugget_exception import NuggetException
 
 from pymobiledevice3.services.mobilebackup2 import Mobilebackup2Service
+from .preference_scope import is_preference_file as _is_preference_target
+from src.utils.preference_reset import PreferenceKeyReset
 
 _logger = logging.getLogger("GoldenNugget.inject")
+preference_delivery_warnings = ContextVar('preference_delivery_warnings', default=None)
+preference_baseline_skips = ContextVar('preference_baseline_skips', default=None)
+_OPTIONAL_MISSING_BASELINE_PATHS = frozenset({
+    ('HomeDomain', 'Library/Preferences/com.apple.SwiftUI.plist'),
+    ('HomeDomain', 'Library/Preferences/com.apple.AvatarUI.Staryu.plist'),
+    ('HomeDomain', 'Library/Preferences/com.apple.bg.system.task.plist'),
+    ('SystemPreferencesDomain', 'FeatureFlags/Global.plist'),
+})
+
+
+def _can_skip_missing_preference_baseline(domain, path):
+    return (domain, path) in _OPTIONAL_MISSING_BASELINE_PATHS
+
+
+class FeatureFlagBaselineUnavailable(ValueError):
+    pass
+
+
+def _merge_preference_payload(original, patch, *, feature_flags=False):
+    if isinstance(patch,Path):
+        patch=patch.read_bytes()
+    existing = plistlib.loads(original)
+    if isinstance(patch, PreferenceKeyReset):
+        if not isinstance(existing, dict) or '$archiver' in existing:
+            raise ValueError('Preference reset requires an ordinary dictionary plist.')
+        for path in patch.paths:
+            target = existing
+            for key in path[:-1]:
+                if key not in target:
+                    break
+                target = target[key]
+                if not isinstance(target, dict):
+                    raise ValueError('Preference reset encountered a non-dictionary parent.')
+            else:
+                target.pop(path[-1], None)
+        return plistlib.dumps(existing, fmt=plistlib.FMT_BINARY, sort_keys=False)
+    changes = plistlib.loads(patch)
+    if (not isinstance(existing, dict) or not isinstance(changes, dict)
+            or '$archiver' in existing or '$archiver' in changes):
+        raise ValueError('Preference edits require ordinary dictionary plists, not keyed archives.')
+    if not changes:
+        raise ValueError('An empty preference dictionary is not a verified reset.')
+    if feature_flags:
+        for domain, flags in changes.items():
+            if not isinstance(flags, dict) or not isinstance(existing.get(domain, {}), dict):
+                raise ValueError('Feature flag domains must be dictionaries.')
+            target = existing.setdefault(domain, {})
+            for key, values in flags.items():
+                if not isinstance(values, dict) or not isinstance(target.get(key, {}), dict):
+                    raise ValueError('Feature flag entries must be dictionaries.')
+                target.setdefault(key, {}).update(values)
+    else:
+        existing.update(changes)
+    return plistlib.dumps(existing, fmt=plistlib.FMT_BINARY, sort_keys=False)
+
+
+def _same_plist_value(left, right):
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _same_plist_value(value, right[key]) for key, value in left.items())
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _same_plist_value(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def _native_patch_covers(managed, native):
+    if isinstance(managed, PreferenceKeyReset) or isinstance(native, PreferenceKeyReset):
+        return (isinstance(managed, PreferenceKeyReset)
+                and isinstance(native, PreferenceKeyReset)
+                and set(managed.paths) <= set(native.paths))
+    if native is None:
+        return False
+    try:
+        managed_values = plistlib.loads(managed)
+        native_values = plistlib.loads(native)
+    except (ValueError, TypeError, plistlib.InvalidFileException):
+        return False
+    if (not isinstance(managed_values, dict) or not managed_values
+            or not isinstance(native_values, dict)
+            or '$archiver' in managed_values or '$archiver' in native_values):
+        return False
+    return all(key in native_values and _same_plist_value(value, native_values[key])
+               for key, value in managed_values.items())
+
+
+def _prepare_preference_merges(conn, device_dir, files):
+    prepared = []
+    missing = []
+    native_mirrors = {path: contents for domain, path, contents, *_ in files
+                      if domain == 'HomeDomain'}
+    omitted_managed = []
+    for domain, path, contents, mode, owner, group in files:
+        if _is_preference_target(domain, path) or isinstance(contents, PreferenceKeyReset):
+            row = conn.execute('SELECT fileID FROM Files WHERE domain=? AND relativePath=? AND flags=1',
+                               (domain, path)).fetchone()
+            if row is None:
+                if _can_skip_missing_preference_baseline(domain, path):
+                    skipped = preference_baseline_skips.get()
+                    if skipped is not None:
+                        skipped.append(f'{domain}/{path}')
+                    _logger.warning(
+                        'Skipping preference edits for %s because its current baseline '
+                        'is absent from the backup', f'{domain}/{path}')
+                    continue
+                if (domain == 'ManagedPreferencesDomain'
+                        and path in ('mobile/com.apple.UIKit.plist',
+                                     'mobile/com.apple.springboard.plist')):
+                    mirror_path = 'Library/Preferences/' + path[len('mobile/'):]
+                    mirror = native_mirrors.get(mirror_path)
+                    if _native_patch_covers(contents, mirror):
+                        omitted_managed.append(path)
+                        continue
+                missing.append((domain, path, 'no file row in the backup'))
+                continue
+            file_id = row[0]
+            payload = device_dir / file_id[:2] / file_id
+            if not payload.is_file():
+                payload = device_dir / file_id
+            if not payload.is_file():
+                missing.append((domain, path, 'missing payload'))
+                continue
+            try:
+                contents = _merge_preference_payload(
+                    payload.read_bytes(), contents,
+                    feature_flags=domain == 'SystemPreferencesDomain' and path == 'FeatureFlags/Global.plist')
+            except (OSError, ValueError, TypeError, plistlib.InvalidFileException) as error:
+                missing.append((domain, path, f'invalid or unreadable preference data ({type(error).__name__})'))
+                continue
+        prepared.append((domain, path, contents, mode, owner, group))
+    if missing:
+        details = '; '.join(f'{domain}/{path}: {reason}' for domain, path, reason in missing[:12])
+        if len(missing) > 12:
+            details += f'; and {len(missing) - 12} more'
+        if all(domain == 'SystemPreferencesDomain' and path == 'FeatureFlags/Global.plist'
+               for domain, path, _ in missing):
+            raise FeatureFlagBaselineUnavailable(
+                'Feature flag overrides cannot be safely prepared from this backup: '
+                f'{details}. No injection started. Set feature-flag controls to Not Used '
+                'to leave them out of this apply. This includes controls outside Internal Options '
+                'that also use FeatureFlags/Global.plist. Another full backup is not guaranteed '
+                'to expose this file. No empty baseline was substituted; this does not prove '
+                'the file is absent from the phone or that iOS accepts these overrides.')
+        raise ValueError(
+            f'{len(missing)} current preference baseline(s) are unavailable: {details}. '
+            'No injection started. A full backup with the current capture scope is required; '
+            'missing backup entries are not proof that the files do not exist on the phone.')
+    for path in omitted_managed:
+        warnings = preference_delivery_warnings.get()
+        if warnings is not None:
+            warnings.append(path)
+        _logger.warning(
+            'No managed baseline for %s; leaving that managed file untouched. '
+            'Only the identical, explicitly staged HomeDomain edit will be delivered. '
+            'Native preferences are not equivalent to managed policy; the tweak effect is unverified.', path)
+    return prepared
 
 
 def _is_encrypted_backup(device_dir: Path) -> bool:
@@ -404,6 +565,9 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
     conn = sqlite3.connect(str(manifest_db))
     injected = unchanged = 0
     try:
+        reset_targets = {(domain, path) for domain, path, contents, *_ in files
+                         if isinstance(contents, PreferenceKeyReset)}
+        files = _prepare_preference_merges(conn, device_dir, files)
         # Batch-level state, computed once instead of per file:
         #   next_inode   - in-memory inode counter (one manifest scan total)
         #   donor_cache  - per-domain donor blob (the device's own row format)
@@ -418,6 +582,10 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
         dir_donor = MBFileArchive.decode(dir_donor[0]) if dir_donor else None
         for domain, relative_path, contents, mode, owner, group in files:
             file_id = hashlib.sha1(f"{domain}-{relative_path}".encode("utf-8")).hexdigest()
+            original_row = conn.execute(
+                'SELECT file FROM Files WHERE domain=? AND relativePath=? AND flags=1',
+                (domain, relative_path)).fetchone()
+            original_blob = original_row[0] if original_row else None
 
             # The restore agent skips a file whose parent directory rows are
             # missing, so ensure the whole directory chain first.
@@ -442,7 +610,10 @@ def inject_files_into_backup(backup_dir: "str | Path", udid: str, files: list,
             # missing value — see _owned().
             payload = device_dir / file_id[:2] / file_id
             size, digest, changed = install_payload(contents, payload)
-            if donor is None:
+            if original_blob is not None and (_is_preference_target(domain, relative_path)
+                                             or (domain, relative_path) in reset_targets):
+                blob = _patch_donor_blob(original_blob, relative_path, contents, size=size, digest=digest)
+            elif donor is None:
                 blob = _build_mbfile_blob(
                     relative_path, contents,
                     mode=safe_mode, owner=_owned(owner), group=_owned(group),

@@ -126,4 +126,3 @@ class IOSTemplatesPage(QWidget):
         for template in templates:
             template.loaded = False  # its old card was just removed
             template.create_ui(self.window, tweaks[TweakID.Templates], widgets, self.templates_layout)
-

@@ -4,7 +4,7 @@ import logging
 import time
 
 from PySide6.QtCore import Qt, QRectF, QThread, Signal, QSize, QTimer
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QLabel
 
 from src.devicemanagement.device_capabilities import has_dynamic_island, device_kind
@@ -133,7 +133,7 @@ def render_tablet(payload):
     return image
 
 
-def render_phone(payload, model):
+def render_phone(payload, model, disconnected=False):
     if device_kind(model) == 'iPad':
         return render_tablet(payload)
     image = QPixmap(268, 540)
@@ -151,6 +151,18 @@ def render_phone(payload, model):
     clip.addRoundedRect(screen, 32, 32)
     painter.save()
     painter.setClipPath(clip)
+    if disconnected:
+        painter.fillRect(screen,Qt.black)
+        painter.setPen(QColor('#d5d5d7'))
+        font=QFont()
+        font.setPixelSize(21)
+        font.setWeight(QFont.Medium)
+        painter.setFont(font)
+        painter.drawText(screen.adjusted(20,0,-20,0),
+                         Qt.AlignCenter|Qt.TextWordWrap,'No Phone Connected')
+        painter.restore()
+        painter.end()
+        return image
     painter.fillRect(screen, QColor('#101114'))
     wallpaper = QPixmap()
     if payload.get('wallpaper'):

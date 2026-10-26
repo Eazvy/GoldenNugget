@@ -30,11 +30,12 @@ import os
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, QUrl, QT_TRANSLATE_NOOP
 from PySide6.QtGui import QDesktopServices, QFont, QFontDatabase
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QLabel, QPlainTextEdit,
+    QDialog, QHBoxLayout, QLabel, QPlainTextEdit,
     QPushButton, QVBoxLayout,
 )
 
 from src.controllers.nugget_logger import get_log_path
+from src.gui.liquid.choice_editor import GlassComboBox as QComboBox
 from src.gui.widgets import (
     _auto_retheme, IOSSwitch, IOSSearchField,
 )

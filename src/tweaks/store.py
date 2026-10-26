@@ -18,6 +18,7 @@ class ChangeBus:
         self._listeners = {}
         self._depth = 0
         self._pending = False
+        self._muted = 0
 
     def subscribe(self, callback):
         token = object()
@@ -26,6 +27,8 @@ class ChangeBus:
         return lambda: self._listeners.pop(token, None)
 
     def notify(self):
+        if self._muted:
+            return
         if self._depth:
             self._pending = True
             return
@@ -38,6 +41,14 @@ class ChangeBus:
                 callback()
             except Exception:
                 log.exception("Tweak change observer failed")
+
+    @contextmanager
+    def suspend(self):
+        self._muted += 1
+        try:
+            yield
+        finally:
+            self._muted -= 1
 
     @contextmanager
     def batch(self):

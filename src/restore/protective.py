@@ -23,7 +23,7 @@ Library/ControlCenter (Control Center module layout), Library/Shortcuts
 Library/WebApp + Library/WebKit/WebsiteData (installed-PWA data on iOS
 releases that keep it outside the web clip), MessagesDomain
 (iMessage/SMS/MMS), and, optionally, CameraRollDomain + MediaDomain (photos).
-KeychainDomain (Apple Watch pairing, iMessage identity, Wi-Fi passwords) is
+KeychainDomain (captured keychain material) is
 included only when backup encryption is enabled — keychain payloads are
 encrypted at rest and iOS rejects them in an unencrypted backup.
 """
@@ -48,6 +48,7 @@ import pymobiledevice3.exceptions as _pm3_exc
 import pymobiledevice3.service_connection as _sc
 from pymobiledevice3.lockdown import LockdownClient
 from pymobiledevice3.exceptions import NotEnoughDiskSpaceError
+from pymobiledevice3.services.lockdown_service import LockdownService
 from src.devicemanagement.progress_status import BackupStatus
 
 from pymobiledevice3.services.mobilebackup2 import (
@@ -57,6 +58,7 @@ from pymobiledevice3.services.mobilebackup2 import (
 from PySide6.QtCore import QCoreApplication
 
 from src.exceptions.nugget_exception import NuggetException, BackupStorageError, BackupDiskSpaceError
+from src.restore.preference_scope import is_preference_file, is_preference_parent, is_preference_upload
 from src.restore.afc_media import (  # noqa: F401  (re-exported public API)
     AFC_MEDIA_TREES,
     afc_media_dir_for,
@@ -73,7 +75,6 @@ from src.restore.protective_cache import (  # noqa: F401  (re-exported public AP
     CACHE_REFRESH_SECS,
     ProtectiveBackupCache,
 )
-from src.tweaks.registry import managed_pref_app_plists
 
 
 @dataclass
@@ -217,8 +218,8 @@ PROTECTIVE_DOMAINS = frozenset({
 
 # KeychainDomain is only included when the user has backup encryption
 # enabled — keychain payloads are encrypted at rest and iOS rejects
-# unencrypted keychain entries in a backup.  This preserves Apple Watch
-# pairing, iMessage identity keys, Wi-Fi passwords, etc.
+# unencrypted keychain entries in a backup. Keeping these entries is not proof
+# that Apple Watch pairing can be reconstructed after a restore.
 KEYCHAIN_DOMAIN = "KeychainDomain"
 
 # Path prefixes within HomeDomain that contain Apple ID account data and
@@ -244,6 +245,13 @@ APPLE_ID_PATH_PREFIXES = (
 SPRINGBOARD_PATH_PREFIXES = (
     "Library/SpringBoard",
 )
+
+WATCH_STATE_PATH_PREFIXES = (
+    "Library/DeviceRegistry",
+    "Library/DeviceRegistry.state",
+)
+
+KEYBOARD_PATH_PREFIXES = ('Library/Keyboard',)
 
 # Path prefixes within HomeDomain holding the Control Center module layout
 # (Library/ControlCenter/ModuleConfiguration.plist). Not part of the
@@ -306,21 +314,11 @@ _SKIP_PATH_PREFIXES = (
     "Library/SpringBoard/StatusBarOverrides.archive",  # iOS 27+ NSKeyedArchiver record
 )
 
-# App-domain mirrors of the managed-preference targets (mcxd copies each
-# managed preference into the target app's own cfprefs domain on disk, so
-# "the tweak is applied" is visible in BOTH files). Phase 3 restores this
-# scope AFTER the sparse restore that clears the managed entry, which
-# resurrects the stale value with nothing left to manage it — the reset looks
-# like it did nothing. Same class of problem as statusBarOverrides above, so
-# they are kept out of the backup entirely; the apply/reset owns both copies.
-_SKIP_APP_PREF_FILES = managed_pref_app_plists()
-
 # Files iOS manages internally and rejects if included in a sparse backup
 # with incorrect metadata (e.g. wrong protection class). With copy=True the
 # existing on-device data is preserved anyway, so skipping them is safe.
 _SKIP_FILES = frozenset({
     "keychain-backup.plist",    # iOS validates protection class, rejects flags=4
-    ".GlobalPreferences.plist",  # Written separately as tweaks; skip to avoid overwrite
 })
 
 # PosterBoard sqlite database carried by the protective backup so wallpaper
@@ -346,13 +344,19 @@ def _is_protective_file(domain: str, relative_path: str, include_photos: bool = 
     # the device decrypts it on restore, so it must be kept.
     if filename in _SKIP_FILES and not (include_keychain and filename == "keychain-backup.plist"):
         return False
+    if is_preference_file(domain, relative_path):
+        return True
+    if domain == 'KeyboardDomain':
+        return True
     if domain == "HomeDomain":
         if relative_path.startswith(_SKIP_PATH_PREFIXES):
             return False
-        if relative_path in _SKIP_APP_PREF_FILES:
-            return False
         return (relative_path.startswith(APPLE_ID_PATH_PREFIXES)
                 or relative_path.startswith(SPRINGBOARD_PATH_PREFIXES)
+                or any(relative_path == root or relative_path.startswith(root + '/')
+                       for root in WATCH_STATE_PATH_PREFIXES)
+                or any(relative_path == root or relative_path.startswith(root + '/')
+                       for root in KEYBOARD_PATH_PREFIXES)
                 or relative_path.startswith(CONTROL_CENTER_PATH_PREFIXES)
                 or relative_path.startswith(SHORTCUTS_PATH_PREFIXES)
                 or relative_path.startswith(WEB_CLIPS_PATH_PREFIXES)
@@ -520,8 +524,10 @@ def is_protective_device_file(device_name: str, include_photos: bool = True,
     DeviceLink; their Manifest.db rows survive so subsequent incremental backups
     do not re-upload them.
     """
+    if is_preference_upload(_device_tree_name(device_name)):
+        return True
     for domain in (("CameraRollDomain", "MediaDomain") if include_photos else ()) + \
-            ("SystemPreferencesDomain", "MessagesDomain", "AddressBookDomain"):
+            ("SystemPreferencesDomain", "MessagesDomain", "AddressBookDomain", "KeyboardDomain"):
         if _domain_match(device_name, domain):
             # Media trees moved to the AFC channel are handed to AFC, not this
             # backup — drop their uploads mid-stream so their payloads never
@@ -529,6 +535,8 @@ def is_protective_device_file(device_name: str, include_photos: bool = True,
             if exclude_afc_media_trees and _media_tree_scope(device_name) in AFC_MEDIA_TREES:
                 continue
             return True
+    if _tree_match(device_name, 'preferences'):
+        return True
     if include_photos and not (exclude_afc_media_trees
                                and _media_tree_scope(device_name) in AFC_MEDIA_TREES) \
             and _tree_match(device_name, "Media"):
@@ -539,6 +547,8 @@ def is_protective_device_file(device_name: str, include_photos: bool = True,
                              or _tree_match(device_name, "Keychains")):
         return True
     for prefix in (APPLE_ID_PATH_PREFIXES + SPRINGBOARD_PATH_PREFIXES
+               + WATCH_STATE_PATH_PREFIXES
+               + KEYBOARD_PATH_PREFIXES
                + CONTROL_CENTER_PATH_PREFIXES + SHORTCUTS_PATH_PREFIXES
                + WEB_CLIPS_PATH_PREFIXES + WEB_APP_PATH_PREFIXES
                + WEBKIT_WEBSITE_DATA_PATH_PREFIXES
@@ -565,7 +575,12 @@ class ProtectiveBackupService(Mobilebackup2Service):
     """
 
     def __init__(self, lockdown, include_posterboard: bool = False, authentication_callback=None):
-        super().__init__(lockdown)
+        pair_record = getattr(lockdown, "pair_record", None)
+        if pair_record is not None and "EscrowBag" not in pair_record:
+            LockdownService.__init__(self, lockdown, self.SERVICE_NAME,
+                                     include_escrow_bag=False)
+        else:
+            super().__init__(lockdown)
         self.include_posterboard = include_posterboard
         self.authentication_callback = authentication_callback
 
@@ -1056,6 +1071,11 @@ def extract_posterboard_db(backup_root: str, udid: str, dest_path: str) -> Optio
             log_debug(f"extract_posterboard_db: no device dir and no Manifest.db under {backup_root}")
             return None
     manifest_db = device_dir / "Manifest.db"
+    if _is_encrypted_backup(device_dir):
+        from src.exceptions.nugget_exception import PosterBoardBackupEncryptionError
+        raise PosterBoardBackupEncryptionError(
+            'PosterBoard extraction requires a readable manifest and decrypted payloads. '
+            'This backup is encrypted, not proven corrupted. Automatic re-backup will not fix it.')
     if not _validate_sqlite_db(manifest_db):
         log_warn(f"extract_posterboard_db: Manifest.db at {manifest_db} is missing/encrypted/"
                  f"not a valid SQLite db (backup may be incomplete)")
@@ -1170,13 +1190,15 @@ def _keep_protective_entry(domain: str, relative_path: str, include_photos: bool
                            include_keychain: bool = False,
                            exclude_afc_media_trees: bool = False) -> bool:
     """Keep-set predicate shared by the plain and encrypted prune paths."""
+    if is_preference_parent(domain, relative_path):
+        return True
     if domain and relative_path and (_is_protective_file(domain, relative_path, include_photos, include_keychain,
                                                          exclude_afc_media_trees)
                                      or domain == "SystemPreferencesDomain"):
         return True
     # the domain root directory row — without it the restore agent may skip
     # the whole domain
-    if relative_path == "" and domain in ("SystemPreferencesDomain", "MessagesDomain"):
+    if relative_path == "" and domain in ("SystemPreferencesDomain", "MessagesDomain", "KeyboardDomain"):
         return True
     if include_keychain and relative_path == "" and domain == KEYCHAIN_DOMAIN:
         return True
@@ -1218,6 +1240,7 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
     if not manifest_db.exists():
         return PruneResult()
 
+    include_keychain = include_keychain or _is_encrypted_backup(device_dir)
     if _is_encrypted_backup(device_dir):
         if not manifest_password:
             log_info("Backup is encrypted and no password was given — skipping local manifest pruning")
@@ -1262,8 +1285,9 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
                     keep_ids.add(file_id)
 
         if missing_payloads:
-            log_warn(f"Prune: dropping {len(missing_payloads)} file rows with missing payloads "
-                     f"(e.g. {missing_payloads[:5]})")
+            raise NuggetException(
+                f'The backup is missing {len(missing_payloads)} protected file payload(s). '
+                'No manifest rows were pruned. Do not restore this incomplete backup.')
 
         cur.execute("CREATE TEMP TABLE nugget_keep (fileID TEXT PRIMARY KEY)")
         cur.executemany("INSERT INTO nugget_keep (fileID) VALUES (?)",

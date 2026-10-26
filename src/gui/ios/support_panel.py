@@ -36,6 +36,7 @@ class ContributorCredit(QWidget):
 class SupportPanel(IOSCard):
     def __init__(self, parent=None, links=None):
         super().__init__(parent)
+        self.setProperty('silentHoverAudio',True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
@@ -71,8 +72,9 @@ class SupportPanel(IOSCard):
         grid.setVerticalSpacing(16)
         acknowledgements = [credit for credit in CREDITS[len(portraits):]
                             if credit[0] not in ('Translations', 'Legacy Translations')]
+        credit_rows = (len(acknowledgements) + 1) // 2
         for index, (role, name, url) in enumerate(acknowledgements):
-            grid.addWidget(self._credit(role, name, url), index // 2, index % 2)
+            grid.addWidget(self._credit(role, name, url), index % credit_rows, index // credit_rows)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         credits_layout.addLayout(grid)
@@ -237,7 +239,7 @@ class SupportPanel(IOSCard):
 
     def _retheme(self):
         super()._retheme()
-        self.setStyleSheet(self.styleSheet() + t("support_panel"))
+        self.setStyleSheet('QFrame#liquidPanel{background:transparent;border:none;}' + t("support_panel"))
         if hasattr(self, '_translation_status'):
             colors = ColorThemeManager.instance().colors
             self._translation_status.setStyleSheet(f'color:{colors.text_secondary}; font-size:13px; background:transparent;')

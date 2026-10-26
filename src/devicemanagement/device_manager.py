@@ -62,6 +62,7 @@ from src.restore.find_my_wait import ApplyCancelledError
 
 from src.tweaks.tweaks import tweaks, TweakID, BasicPlistTweak, AdvancedPlistTweak, NullifyFileTweak, StatusBarTweak
 from src.tweaks.tweak_classes import ReversibleBooleanPlistTweak
+from src.tweaks.candidate_preferences import InstalledAppSuggestionsBlacklist
 from src.tweaks.status_bar.statusbar_archive import build_reset_archive
 from src.tweaks.posterboard.posterboard_tweak import PosterboardTweak
 from src.tweaks.posterboard.template_options.templates_tweak import TemplatesTweak
@@ -88,6 +89,7 @@ def get_files_list_str(files_list: list[FileToRestore] = None) -> str:
     return files_str
 
 def show_apply_error(e: Exception, update_label=lambda x: None, files_list: list[FileToRestore] = None):
+    from src.restore.inject import FeatureFlagBaselineUnavailable
     traceback_text = "".join(traceback.format_exception(type(e), e, e.__traceback__))
     print(traceback_text)
     # _restore_ios27 attaches the path as an exception note, which only the
@@ -96,7 +98,14 @@ def show_apply_error(e: Exception, update_label=lambda x: None, files_list: list
         r"Protective backup kept at:\s*(.+)", traceback_text)
     backup_path = backup_match.group(1).strip() if backup_match else None
     update_label("Failed to restore")
-    if is_find_my_error(e):
+    from src.exceptions.device_errors import is_icloud_restore_in_progress
+    if is_icloud_restore_in_progress(e):
+        return ApplyAlertMessage(
+            QCoreApplication.tr('The iPhone reports that an iCloud restore is still in progress. Wait for it to finish before applying or restoring changes.'),
+            title=QCoreApplication.tr('iCloud restore in progress'),
+            detailed_txt=QCoreApplication.tr('Keep the iPhone connected to Wi-Fi and power. Do not cancel the iCloud restore or erase the device to bypass this error. No automatic retry was started.') + '\n\n' + traceback_text,
+            icon=QMessageBox.Warning)
+    elif is_find_my_error(e):
         return ApplyAlertMessage(QCoreApplication.tr("Find My must be disabled in order to use this tool."),
                        detailed_txt=QCoreApplication.tr("Disable Find My from Settings (Settings -> [Your Name] -> Find My) and then try again."))
     elif "Encrypted Backup MDM" in str(e):
@@ -135,6 +144,12 @@ def show_apply_error(e: Exception, update_label=lambda x: None, files_list: list
     elif isinstance(e, InvalidServiceError):
         return ApplyAlertMessage(QCoreApplication.tr("The requested device service is unavailable. This error alone does not establish whether Developer Mode is enabled."),
                                  detailed_txt="TRACEBACK:\n\n" + traceback_text)
+    elif isinstance(e, FeatureFlagBaselineUnavailable):
+        return ApplyAlertMessage(
+            QCoreApplication.tr('Feature flag overrides cannot be prepared from this backup. Set feature-flag controls to Not Used before applying other changes.'),
+            title=QCoreApplication.tr('Feature flag baseline unavailable'),
+            detailed_txt=str(e), backup_path=backup_path,
+            action_id='clear_feature_flag_selections')
     elif isinstance(e, NuggetException):
         return ApplyAlertMessage(str(e), detailed_txt=e.detailed_text,
                                  backup_path=backup_path)
@@ -431,8 +446,8 @@ class DeviceManager:
         # the domain delivery on iOS 26, even when the selected tweaks are basic
         # plist tweaks that never set ``restoring_domains``.
         dev_version = self.get_current_device_version()
-        if self.pref_manager.skip_setup and (restoring_domains
-                or (dev_version and Version(dev_version) < Version("27.0"))):
+        if (self.pref_manager.skip_setup and dev_version
+                and Version(dev_version) < Version("27.0")):
             # get the already existing cloud config info
             async with lockdown_session(self.data_singleton.current_device.udid) as ld:
                 async with MobileConfigService(lockdown=ld) as mcs:
@@ -502,20 +517,30 @@ class DeviceManager:
             if not self.get_current_device_partially_supported():
                 self._report_operation_stage("tweaks")
             update_label(QCoreApplication.tr("Preparing to restore...") + self.do_not_unplug)
-            await restore_files(
-                files=files_to_restore, reboot=self.pref_manager.auto_reboot,
-                lockdown_client=ld,
-                progress_callback=self.progress_callback,
-                backup_password=backup_password,
-                prepared_backup_root=prepared_backup_root,
-                skip_protective_backup=skip_protective_backup,
-                include_keychain=include_keychain,
-                prompt_choice=prompt_choice,
-                afc_media=afc_media_enabled(self.pref_manager.use_afc_media),
-                supervised=supervised,
-                organization_name=organization_name,
-                stage_callback=self._report_operation_stage,
-            )
+            from src.restore.inject import (preference_baseline_skips,
+                                            preference_delivery_warnings)
+            delivery_warnings = []
+            baseline_skips = []
+            warning_token = preference_delivery_warnings.set(delivery_warnings)
+            skip_token = preference_baseline_skips.set(baseline_skips)
+            try:
+                await restore_files(
+                    files=files_to_restore, reboot=self.pref_manager.auto_reboot,
+                    lockdown_client=ld,
+                    progress_callback=self.progress_callback,
+                    backup_password=backup_password,
+                    prepared_backup_root=prepared_backup_root,
+                    skip_protective_backup=skip_protective_backup,
+                    include_keychain=include_keychain,
+                    prompt_choice=prompt_choice,
+                    afc_media=afc_media_enabled(self.pref_manager.use_afc_media),
+                    supervised=supervised,
+                    organization_name=organization_name,
+                    stage_callback=self._report_operation_stage,
+                )
+            finally:
+                preference_delivery_warnings.reset(warning_token)
+                preference_baseline_skips.reset(skip_token)
             tweaks[TweakID.PosterBoard].config_manager.save_staged_ids(self.get_current_device_udid())
             if tweaks[TweakID.PosterBoard].full_reset:
                 # the on-device PosterBoard container was wiped — the stale
@@ -530,6 +555,16 @@ class DeviceManager:
             msg = QCoreApplication.tr("Your device will now restart.\n\nRemember to turn Find My back on!")
             if not self.pref_manager.auto_reboot:
                 msg = QCoreApplication.tr("Please restart your device to see changes.")
+            if delivery_warnings:
+                msg += QCoreApplication.tr(
+                    "\n\nManaged preference baselines were unavailable for: {0}. "
+                    "Only identical native preference edits were delivered; managed files were left untouched. "
+                    "Some tweak effects may differ or not work.").format(', '.join(sorted(set(delivery_warnings))))
+            if baseline_skips:
+                msg += QCoreApplication.tr(
+                    "\n\nPreference tweaks were skipped because the backup did not contain current baselines for: {0}. "
+                    "Those preferences were left unchanged; other selected changes were applied.").format(
+                        ', '.join(sorted(set(baseline_skips))))
             return ApplyAlertMessage(txt=QCoreApplication.tr("All done! ") + msg, title=QCoreApplication.tr("Success!"), icon=QMessageBox.Information)
 
     def _report_operation_stage(self, stage, category=""):
@@ -641,7 +676,7 @@ class DeviceManager:
         unavailable = set()
         disabled = []
         for tweak_id, spec in SPECS_BY_ID.items():
-            reasons = compatibility_reasons(tweak_id, version, model, allow_untested=True)
+            reasons = compatibility_reasons(tweak_id, version, model)
             if not reasons:
                 continue
             unavailable.add(tweak_id)
@@ -716,6 +751,16 @@ class DeviceManager:
                 if tweaks[TweakID.HideDICompletely].enabled:
                     raise NuggetException("Turn off Disable Dynamic Island before testing Dynamic Island Availability. Test one option at a time.")
             self._report_operation_stage("prepare")
+            posterkit=tweaks.get(TweakID.PosterKitOverrides)
+            if posterkit is not None and posterkit.enabled and posterkit.value:
+                from src.restore.protective import is_backup_encrypted
+                from src.devicemanagement.session import lockdown_session
+                from src.exceptions.nugget_exception import PosterBoardBackupEncryptionError
+                async with lockdown_session(self.get_current_device_udid()) as client:
+                    if await is_backup_encrypted(client):
+                        raise PosterBoardBackupEncryptionError(
+                            'PosterKit archive editing cannot extract encrypted device backups in this build. '
+                            'No backup or injection started. Do not disable encryption to bypass this check.')
             update_label(QCoreApplication.tr("Applying changes to files..."))
             self._protective_backup_skipped = False
             self._known_backup_encryption = None  # re-established by Phase 0
@@ -877,7 +922,8 @@ class DeviceManager:
 
     async def _prepare_protective_backup(self, update_label=lambda x: None,
                                          needs_posterboard: bool = False,
-                                         prompt_password=None) -> tuple:
+                                         prompt_password=None,
+                                         force_standard_media=False) -> tuple:
         """Phase 0: build the protective backup that Phase 3 will restore.
 
         Wraps ``_build_protective_backup`` and refuses to hand back a backup that
@@ -886,7 +932,8 @@ class DeviceManager:
         several return paths inside it.
         """
         prepared, pb_ok = await self._build_protective_backup(
-            update_label, needs_posterboard, prompt_password)
+            update_label, needs_posterboard, prompt_password,
+            force_standard_media=force_standard_media)
         media_src = getattr(prepared, "media_src", "") if prepared else ""
         media_verified = not media_src or await asyncio.to_thread(media_store_verified, media_src)
         if not media_verified:
@@ -941,9 +988,8 @@ class DeviceManager:
     
         * CACHE (EXPERIMENTAL, off by default): reuses/refreshes the persistent
           per-device master ("Use Fast Backup Cache (Experimental)" in Settings).
-          When wallpapers are applied the master ALWAYS refreshes first — the
-          "reuse as-is" fast path only applies when nothing is pending — so the
-          extracted DB is never a stale copy.
+          The master always refreshes before apply/reset, including when it was
+          just created, so recently changed device preferences are captured.
     
 Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
         container cannot be read out of the backup the caller falls back to the
@@ -1049,6 +1095,12 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                          and not os.environ.get("GOLDENNUGGET_NO_BACKUP_CACHE"))
 
         async with lockdown_session(udid) as lc:
+            if needs_posterboard and await is_backup_encrypted(lc):
+                from src.exceptions.nugget_exception import PosterBoardBackupEncryptionError
+                raise PosterBoardBackupEncryptionError(
+                    'PosterBoard changes need extraction of an encrypted backup, which this build does not support. '
+                    'No backup or injection was started. Repeating the backup cannot fix this. '
+                    'Leave PosterBoard changes out of this apply; do not disable backup encryption to bypass this check.')
             if not cache_enabled:
                 log_info("Protective backup cache is an experimental feature and is "
                          "off — running a fresh live protective backup instead")
@@ -1072,31 +1124,16 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                     return await _live_backup(lc)
                 manifest_password = password
                 self._backup_password = password  # reuse it for the Phase 3 restore prompt
-            from src.restore.protective import CACHE_REFRESH_SECS, ProtectiveBackupCache
+            from src.restore.protective import ProtectiveBackupCache
             cache = ProtectiveBackupCache(udid, product_version=self.get_current_device_version(),
                                           encrypted=encrypted)
-            found = cache.locate()
-            # "the folder is not empty" is not proof of a usable media copy: a
-            # cancelled or interrupted pull leaves a partial tree that still has
-            # files in it. Only a store whose last pull ran to completion counts
-            # as in sync, so a partial one always forces a refresh (which redoes
-            # the pull) instead of being carried into the wipe.
-            media_ready = (not use_afc_media
-                           or await asyncio.to_thread(media_store_verified, str(cache.media_dir)))
-            # fast path: a fresh cache (no wallpapers pending, media already in
-            # sync) is reused as-is — no device session at all; past the TTL it
-            # gets an incremental refresh. The AFC media store has to exist too,
-            # or the refresh (which pulls the photos) is still needed.
-            if found and not needs_posterboard and found["age_secs"] < CACHE_REFRESH_SECS and media_ready:
-                log_info(f"Cache is {found['age_secs'] // 60} min old — reusing without a backup session")
-                master_root = str(cache.master_root)
-            else:
-                update_label(QCoreApplication.tr("Backing up device (cached)..."))
-                master_root = await cache.refresh(
-                    lc, progress_callback=self._backup_progress(update_label, str(cache.master_root)),
-                    include_photos=True, include_posterboard=needs_posterboard,
-                    include_keychain=encrypted,
-                    include_afc_media=use_afc_media)
+            cache.locate()
+            update_label(QCoreApplication.tr("Refreshing current device settings and backup..."))
+            master_root = await cache.refresh(
+                lc, progress_callback=self._backup_progress(update_label, str(cache.master_root)),
+                include_photos=True, include_posterboard=needs_posterboard,
+                include_keychain=encrypted,
+                include_afc_media=use_afc_media)
 
             media_src = str(cache.media_dir) if use_afc_media else ""
             prepared = PreparedBackup(root=master_root, manifest_password=manifest_password,
@@ -1217,7 +1254,8 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
             model=self.get_current_device_model(), templates=templates,
             force_pb_refresh=getattr(self.pref_manager, "auto_refresh_posterboard", True),
             prepare_setup=self.add_skip_setup, concat_file=self.concat_file,
-            add_community_files=self._add_community_files, update_label=update_label)
+            add_community_files=self._add_community_files, update_label=update_label,
+            udid=self.get_current_device_udid())
         artifacts = await compile_tweaks(
             context, HotLoad(self.pref_manager.settings), self._disable_unavailable_controls(update_label))
         self._last_community_writes = artifacts.community_writes
@@ -1325,32 +1363,26 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
             if not udid:
                 raise NuggetException(QCoreApplication.tr("No device connected."))
             dev_version = self.get_current_device_version()
-            # No original-plist capture: reset writes stock values straight to
-            # the device on every iOS version. Pulling the device's own plists
-            # first (the old psysbackup step) was only ever done for iOS 27, and
-            # it did not buy much — the managed-preferences copy the tweaks write
-            # to already holds the tweaked values, so restoring a captured
-            # "original" re-wrote the very tweaks the user asked to remove.
             files_to_null: list[str] = []
             community_leftover: list[str] = []
             uses_domains = False
+            from src.controllers.apply_preview import load_preview
+            from src.controllers.default_reset import preference_reset_plan
+            recorded = load_preview(udid, dev_version)
+            reset_plan = preference_reset_plan(recorded, reset_pages)
+            recorded = recorded or {}
+            for location, contents in reset_plan.items():
+                self.concat_file(contents, location.value, files_to_restore,
+                                 owner=0 if location == FileLocation.disabledDaemons else 501,
+                                 group=0 if location == FileLocation.disabledDaemons else 501)
+                if Version(dev_version) >= Version('27.0'):
+                    mirror = managed_pref_target(location.value)
+                    if mirror:
+                        self.concat_file(contents, f'{HOME_PREFIX}{mirror}', files_to_restore)
 
             # plain if-chains, not match: the page set is a long, stable list
             # and a flat chain keeps the diff readable when pages are added
             for page in reset_pages:
-                section = {
-                    Page.Springboard: Section.SPRINGBOARD,
-                    Page.InternalOptions: Section.INTERNAL,
-                    Page.LiquidGlass: Section.LIQUID_GLASS,
-                }.get(page)
-                if section is not None:
-                    # Derive plist coverage from the same registry as apply.
-                    # Opaque payloads (e.g. Siri AI's keyed archive) have their
-                    # own reset flow and must never receive an empty plist.
-                    files_to_null.extend(
-                        spec.location.value for spec in SPECS
-                        if spec.section == section and spec.location.value.endswith(".plist")
-                    )
                 if page == Page.StatusBar:
                     ## STATUS BAR
                     dev_version = self.get_current_device_version()
@@ -1383,91 +1415,50 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                             domain="HomeDomain"
                         ))
                 elif page == Page.Springboard:
-                    ## SPRINGBOARD
-                    files_to_null.append(FileLocation.springboard.value)
-                    files_to_null.append(FileLocation.uikit.value)
+                    pass
                 elif page == Page.Daemons:
-                    files_to_null.append(FileLocation.ota.value)
-                    ## DAEMONS
-                    default_daemons = {
-                        "com.apple.magicswitchd.companion": True,
-                        "com.apple.security.otpaird": True,
-                        "com.apple.dhcp6d": True,
-                        "com.apple.bootpd": True,
-                        "com.apple.ftp-proxy-embedded": False,
-                        "com.apple.relevanced": True
-                    }
-                    self.concat_file(
-                        contents=plistlib.dumps(default_daemons),
-                        path=FileLocation.disabledDaemons.value,
-                        files_to_restore=files_to_restore,
-                        owner=0, group=0
-                    )
-                    uses_domains = True
+                    pass
                 elif page == Page.Templates:
                     ## COMMUNITY TWEAKS FROM TEMPLATES
                     from src.tweaks.posterboard.community_tweaks import load_record, reset_plan
                     to_empty, community_leftover = reset_plan(load_record(udid))
                     files_to_null.extend(path for path in to_empty if path not in files_to_null)
                 elif page == Page.InternalOptions:
-                    ## INTERNAL OPTIONS
-                    files_to_null.append(FileLocation.globalPreferences.value)
-                    files_to_null.append(FileLocation.globalPreferencesHomeDomain.value)
-                    files_to_null.append(FileLocation.appStore.value)
-                    files_to_null.append(FileLocation.backboardd.value)
-                    files_to_null.append(FileLocation.coreMotion.value)
-                    files_to_null.append(FileLocation.pasteboard.value)
-                    files_to_null.append(FileLocation.notes.value)
-                    files_to_null.append(FileLocation.accessibility.value)
+                    pass
+                elif page == Page.LiquidGlass:
+                    pass
+                else:
+                    raise NuggetException(
+                        f'No verified rollback is available for {page.name}. No reset was started.')
 
-            # add the files to null from the list
-            written_paths = set()
-            for file_path in dict.fromkeys(files_to_null):
-                if file_path in written_paths:
-                    continue
-                # All supported versions (26.2+) need parseable empty plists.
-                # A zero-byte SpringBoard preference file can crash at boot.
-                contents = plistlib.dumps({})
-                self.concat_file(
-                    contents=contents,
-                    path=file_path,
-                    files_to_restore=files_to_restore
-                )
-                written_paths.add(file_path)
-                # mcxd copies every managed preference into the target app's
-                # own cfprefs domain on disk, so an applied tweak is visible in
-                # TWO files: the /var/Managed Preferences plist Nugget owns and
-                # Library/Preferences/<domain>.plist. Emptying only the first
-                # leaves the merged value in the mirror, where nothing manages
-                # it any more -- and the Phase 3 protective restore used to
-                # hand that stale mirror straight back (this is what kept the
-                # Dynamic Island hidden after a reset). Clear both copies.
-                # The mirror can retain these values on every supported OS,
-                # regardless of how the reset is delivered.
-                app_pref = managed_pref_target(file_path)
-                if app_pref is not None and f"{HOME_PREFIX}{app_pref}" not in written_paths:
-                    self.concat_file(
-                        contents=contents,
-                        path=f"{HOME_PREFIX}{app_pref}",
-                        files_to_restore=files_to_restore,
-                        owner=501, group=501
-                    )
-                    written_paths.add(f"{HOME_PREFIX}{app_pref}")
+            if files_to_null:
+                raise NuggetException(
+                    'Preference reset needs a verified pre-tweak baseline. '
+                    'Clearing whole preference files would also erase unrelated settings. '
+                    'No reset was started; existing backups are unchanged.')
+
+            if not files_to_restore:
+                raise NuggetException('There is no verified reset payload. No device restore was started.')
 
             await self.add_skip_setup(files_to_restore, uses_domains)
 
+            prepared_root = None
+            if reset_plan:
+                prepared_root, _ = await self._prepare_protective_backup(update_label)
+
             # restore to the device
             final_alert = await self.start_restore(files_to_restore, update_label,
+                                                   prepared_backup_root=prepared_root,
                                                    prompt_choice=prompt_choice)
-            # the device is back to stock — drop the apply record so a future
-            # apply never skips Phase 2 against a reset device
+            # Invalidate selection history after the supported targeted reset.
             from src.restore.lastapply import clear_lastapply
             udid = self.get_current_device_udid()
             if udid:
                 clear_lastapply(udid)
-                # A partial reset cannot be reconstructed from selection history.
-                from src.controllers.apply_preview import clear_preview
-                clear_preview(udid)
+                from src.controllers.apply_preview import write_preview
+                from src.controllers.default_reset import remaining_reset_entries
+                write_preview(udid, dev_version, {
+                    'entries': remaining_reset_entries(recorded, reset_pages)})
                 if Page.Templates in reset_pages:
                     from src.tweaks.posterboard.community_tweaks import clear_record
                     clear_record(udid)
@@ -1476,6 +1467,10 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                     "Not reset, because GoldenNugget has no copy of what was there before: {0}").format(
                         ", ".join(community_leftover)))
             update_label(QCoreApplication.tr("Success!"))
+            if Page.InternalOptions in reset_pages and 'SiriAI' in recorded:
+                final_alert = ApplyAlertMessage(
+                    'Recorded preference and daemon overrides were reset. Siri AI eligibility overrides were not changed; use Reset Siri AI Overrides separately. PosterKit and imported wallpaper changes are not included in this reset.',
+                    title='Defaults restored', icon=QMessageBox.Information)
             return True
         except ApplyCancelledError:
             raise
