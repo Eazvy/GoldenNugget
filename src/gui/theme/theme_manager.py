@@ -29,7 +29,8 @@ class ColorThemeManager(QObject):
         if self._mode not in ('dark', 'light') or not LIGHT_MODE_AVAILABLE:
             self._mode = 'dark'
         self._accent_name = self._settings.value("accent_color", "blue")
-        if self._accent_name not in ACCENT_PRESETS:
+        self._custom_accent = self._settings.value('liquid/custom_accent', '#cfa55d')
+        if self._accent_name not in ACCENT_PRESETS and self._accent_name != 'custom':
             self._accent_name = 'blue'
         self._colors = self._build_colors()
         self._revision = 0
@@ -83,6 +84,18 @@ class ColorThemeManager(QObject):
             return
         self._accent_name = name
         self._settings.setValue("accent_color", name)
+        self._publish_colors()
+
+    def set_custom_accent(self, value: str):
+        color = QColor(value)
+        if not color.isValid():
+            return
+        if self._accent_name == 'custom' and self._custom_accent == color.name():
+            return
+        self._custom_accent = color.name()
+        self._accent_name = 'custom'
+        self._settings.setValue('liquid/custom_accent', self._custom_accent)
+        self._settings.setValue('accent_color', 'custom')
         self._publish_colors()
 
     def _publish_colors(self):
@@ -171,7 +184,11 @@ class ColorThemeManager(QObject):
     def _build_colors(self) -> ThemeColors:
         palette = DARK if self.is_dark else LIGHT
         presets = ACCENT_PRESETS if self.is_dark else LIGHT_ACCENT_PRESETS
-        accent, hover, pressed = presets[self._accent_name]
+        if self._accent_name == 'custom':
+            color = QColor(self._custom_accent)
+            accent, hover, pressed = color.name(), color.lighter(115).name(), color.darker(115).name()
+        else:
+            accent, hover, pressed = presets[self._accent_name]
         return palette.with_accent(accent, hover, pressed)
 
     def accent_hex(self) -> str:

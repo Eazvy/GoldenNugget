@@ -36,6 +36,8 @@ class Translator:
     def set_default_locale(self, code: str):
         QLocale.setDefault(QLocale(code))
     def set_new_language(self, code: str, restart: bool = False):
+        from src.controllers.live_translation import collect_translatable_ui, apply_translatable_ui
+        snapshot = collect_translatable_ui(self.app, self._disk_translations_path(), QLocale().name())
         if not code:
             self.settings.remove("locale_code")
             code = self.system_locale_code()
@@ -46,6 +48,8 @@ class Translator:
         self.settings.sync()
         self.set_default_locale(code)
         self.load_translations()
+        self.app.setLayoutDirection(QLocale().textDirection())
+        apply_translatable_ui(snapshot)
         if restart:
             os.execl(sys.executable, sys.executable, *sys.argv)
 

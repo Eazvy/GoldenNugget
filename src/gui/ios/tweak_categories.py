@@ -167,10 +167,18 @@ BOTTOM_TWEAK_CATEGORIES = (
 
 def _catalog_category(spec):
     name = spec.id.name
+    if spec.section == Section.POSTERBOARD:
+        return 'PosterKit Archives' if name=='PosterKitOverrides' else 'Wallpaper Feature Flags' if spec.kind==Kind.POSTER_FLAG else 'Wallpaper Dictionaries'
     if spec.section == Section.SPRINGBOARD:
         return next((title for title, names in SPRINGBOARD_GROUPS.items() if name in names),
                     "Other System Options")
     if spec.section == Section.INTERNAL:
+        if spec.id.name in ('DisableCollectionViewPrefetching', 'TableViewCellPrefetchingModeResearch'):
+            return 'Experimental Performance'
+        if spec.id.name in ('SpotlightMetricsWritingResearch',
+                            'ICloudBackgroundTaskSchedulingResearch',
+                            'DASFairSchedulingQueueResearch'):
+            return 'Research Leads'
         return next((title for title, names in INTERNAL_GROUPS.items() if name in names),
                     "Other Internal Options")
     if name.startswith("FloatingContentView"):

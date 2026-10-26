@@ -83,7 +83,8 @@ class ContributorMedia(QObject):
 
     def avatar(self, button, link, paint):
         owner = github_owner(link)
-        if not owner:
+        direct = urlparse(link).scheme == 'https' and urlparse(link).hostname == 'cdn.discordapp.com'
+        if not owner and not direct:
             return
         target = weakref.ref(button)
 
@@ -91,7 +92,7 @@ class ContributorMedia(QObject):
             widget = target()
             if data and widget is not None and isValid(widget):
                 paint(widget, data)
-        self.fetch(f'https://github.com/{owner}.png?size=176', ready)
+        self.fetch(link if direct else f'https://github.com/{owner}.png?size=176', ready)
 
     def contributors(self, repository, callback):
         people = {}

@@ -170,6 +170,11 @@ class IOSApplyPage(QWidget):
     def set_stage(self, stage, category=""):
         self.progress_card.set_stage(stage, category)
 
+    def set_status_only(self, enabled: bool):
+        self._status_only = enabled
+        for widget in (self.apply_header, self.apply_card, self.remove_header, self.remove_card):
+            widget.setVisible(not enabled and not self._busy)
+
     def set_busy(self, busy: bool):
         if busy and not self._busy:
             protective = self.window.device_manager.get_current_device_partially_supported()
@@ -181,7 +186,7 @@ class IOSApplyPage(QWidget):
         self._busy = busy
         self.find_my_warning.set_busy(busy)
         for widget in (self.apply_header, self.apply_card, self.remove_header, self.remove_card):
-            widget.setVisible(not busy)
+            widget.setVisible(not busy and not getattr(self, '_status_only', False))
         if busy:
             self._pause_timer.start()
         else:

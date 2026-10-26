@@ -98,7 +98,12 @@ class _TileCard(IOSCard):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMouseTracking(False)
+        self.setMouseTracking(True)
+
+    def showEvent(self,event):
+        for label in self.findChildren(QLabel):
+            label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        super().showEvent(event)
 
     def _retheme(self):
         self.setStyleSheet(t("home_tile"))
@@ -108,7 +113,7 @@ class _CardGrid(QWidget):
     """Keep visible home tiles in their final row, including before first show."""
     MIN_CARD_WIDTH = 140
     SPACING = 12
-    MAX_COLUMNS = 7
+    MAX_COLUMNS = 6
 
     def __init__(self, cards, parent=None):
         super().__init__(parent)
@@ -417,8 +422,6 @@ class IOSHomePage(QWidget):
         cards_row = [self._make_card(
             "PosterBoard", QT_TRANSLATE_NOOP("Nugget", "Animated wallpapers & video"), 2),
             self._make_card(
-            "Templates", QT_TRANSLATE_NOOP("Nugget", "Custom tweaks from .batter files"), 14),
-            self._make_card(
             "Tweaks", "Customize system settings", 1),
             self._make_card(
             "Daemons", "Disable system daemons", 3),
@@ -428,7 +431,7 @@ class IOSHomePage(QWidget):
             "Icon Themes", "Themed app icons & labels", 10),
             self._make_card(
             "Passcode Theme", "Custom keypad theme (.passthm)", 11)]
-        (self.posterboard_card, self.templates_card, _, self.daemons_card,
+        (self.posterboard_card, _, self.daemons_card,
          self.statusbar_card, _, self.passcode_theme_card) = cards_row
         self.cards_grid = _CardGrid(cards_row)
         layout.addWidget(self.cards_grid)
@@ -714,7 +717,7 @@ class IOSHomePage(QWidget):
         self.window.open_presets_section()
 
     def switch_to_ios_page(self, index: int):
-        self.window.show_ios_page(index)
+        self.window.bottom_navigation.navigate(index)
 
     def open_apply_classic(self):
         """Open the dedicated Apply page before starting an operation."""
@@ -1052,6 +1055,7 @@ class IOSHomePage(QWidget):
     def _make_card(self, title: str, subtitle: str, page_index: int) -> IOSCard:
         """One home feature tile: a big themed icon with the name below it."""
         card = _TileCard()
+        card.setProperty('liquidHomeCard',True)
         card.setMaximumWidth(180)
         card.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Preferred)
@@ -1062,10 +1066,11 @@ class IOSHomePage(QWidget):
         card_layout.setAlignment(Qt.AlignHCenter)
 
         icon_res = FEATURE_ICONS.get(title, ":/icon/compass.svg")
-        icon_lbl = QLabel(card)
-        # A 140px tile has 120px of content after its horizontal margins.
-        icon_lbl.setFixedSize(_CardGrid.MIN_CARD_WIDTH - 20, 128)
+        from src.gui.liquid.controls import MagnifyingArtwork
+        icon_lbl = MagnifyingArtwork(card)
+        icon_lbl.setFixedSize(140, 128)
         icon_lbl.setAlignment(Qt.AlignCenter)
+        card._home_artwork_motion=icon_lbl
         # transparent, so the label never paints the palette window color over
         # the tile (see the home_tile_* styles)
         icon_lbl.setStyleSheet("background-color: transparent;")
@@ -1096,6 +1101,7 @@ class IOSHomePage(QWidget):
     def _make_catalog_row(self) -> IOSCard:
         """The Community Catalog entry: icon, name and caption on one line."""
         card = _TileCard()
+        card.setProperty('liquidCatalog',True)
         row = QHBoxLayout(card)
         row.setContentsMargins(16, 10, 16, 10)
         row.setSpacing(12)
@@ -1156,15 +1162,19 @@ class IOSHomePage(QWidget):
             FEATURE_ICONS["PosterBoard"]: 126,
         }
         artwork = theme_pixmap(icon_res, self._c.text_primary,
-                               min(sizes.get(icon_res, 100),
-                                   label.width() - 8, label.height() - 8), dpr)
+                               sizes.get(icon_res, 100), dpr)
+        offsets = {
+            FEATURE_ICONS["Tweaks"]: -14,
+            FEATURE_ICONS["Icon Themes"]: 9,
+        }
+        offset = offsets.get(icon_res, 0)
         canvas = QPixmap(round(label.width() * dpr), round(label.height() * dpr))
         canvas.setDevicePixelRatio(dpr)
         canvas.fill(Qt.GlobalColor.transparent)
         painter = QPainter(canvas)
         width = artwork.width() / artwork.devicePixelRatioF()
         height = artwork.height() / artwork.devicePixelRatioF()
-        painter.drawPixmap(round((label.width() - width) / 2),
+        painter.drawPixmap(round((label.width() - width) / 2 + offset),
                            round((label.height() - height) / 2), artwork)
         painter.end()
         label.setPixmap(canvas)

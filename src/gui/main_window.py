@@ -264,7 +264,7 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
         nav_wrap_layout.addWidget(self.ios_nav)
         ios_root_layout.addWidget(nav_wrap)
         ios_root_layout.addWidget(self.ios_pages, 1)
-        from src.gui.ios.bottom_navigation import BottomNavigation
+        from src.gui.liquid.dock import LiquidDock as BottomNavigation
         self.bottom_navigation = BottomNavigation(self, ios_root)
 
         # Unified shell: classic sidebar + [classic home | iOS root | classic daemons].
@@ -344,6 +344,13 @@ class MainWindow(QtWidgets.QMainWindow, DeviceBarMixin, SettingsMixin,
 
         # Apply the initial themed global stylesheet
         self._apply_global_stylesheet()
+        from src.gui.liquid.experience import LiquidExperience
+        self.liquid = LiquidExperience(self)
+        QtCore.QTimer.singleShot(0, self._prewarm_control_pages)
+
+    def _prewarm_control_pages(self):
+        self.ios_tweaks.prepare_content(finish=False)
+        self.ios_daemons.prepare_content(finish=False)
 
     def run_first_launch_prompts(self):
         """Present the first-launch dialogs AFTER the window is on screen.

@@ -3,6 +3,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from src.qt.custom_elements.resizable_image_label import ResizableImageLabel
 from src.tweaks.posterboard.template_options import OptionType
 from src.tweaks.posterboard.community_tweaks import CommunityTweak
+from src.gui.liquid.choice_editor import GlassComboBox
 
 
 class TemplateEditor:
@@ -225,7 +226,7 @@ class TemplateEditor:
             edit.textEdited.connect(lambda text, item=tweak: setattr(item, "value", text))
             return edit
         if control.type == "choice":
-            combo = QtWidgets.QComboBox(parent)
+            combo = GlassComboBox(parent)
             for label, value in control.choices:
                 combo.addItem(label)
             values = [value for _, value in control.choices]

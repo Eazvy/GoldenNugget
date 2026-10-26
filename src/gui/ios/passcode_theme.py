@@ -19,8 +19,9 @@ from typing import Optional
 from PySide6.QtCore import Qt, QCoreApplication, QThread, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
-    QPushButton, QMessageBox, QFileDialog, QComboBox,
+    QPushButton, QMessageBox, QFileDialog,
 )
+from src.gui.liquid.choice_editor import GlassComboBox as QComboBox
 
 # NOTE: ``src.airlift`` and ``src.devicemanagement.session`` are imported lazily
 # inside PasscodeThemeWriteThread.run(). Together they pull the whole

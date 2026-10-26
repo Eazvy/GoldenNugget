@@ -109,3 +109,11 @@ class NavigationSidebar(Sidebar):
             active_background=colors.bg_tertiary, active_indicator=colors.accent,
             separator=colors.divider, width=232, item_height=38,
         ))
+
+
+from src.gui.liquid.controls import LiquidSwitch as IOSSwitch
+from src.gui.liquid.controls import LiquidActionButton as IOSPrimaryButton
+from src.gui.liquid.controls import LiquidDangerButton as IOSDangerButton
+from src.gui.liquid.navigation import LiquidNavBar as IOSNavBar
+
+from src.gui.liquid.controls import LiquidCard as IOSCard
