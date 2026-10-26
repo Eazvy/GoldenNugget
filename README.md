@@ -290,6 +290,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [Lucide contributors][LucideGitHub] for the interface icons.
 - [Rasmus Andersson][rsmsGitHub] for the Inter font.
 - Translations crowdsourced using [gNugget-i18n repository][i18n]
+- [Prognosticate-X] for [Status Bar research][sbr] on iOS 27
 - [LeminLimez] for creating Nugget.
 - [0xjonhnnydev] for [AirLift]
 - [LEGACY] Old translations were crowdsourced using [Nugget POEditor][POEditorJoin]. Thank you everyone who assisted in the translation effort!
@@ -307,6 +308,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [pillow-heif contributors][pillowHeifGitHub] for HEIF image decoding on Linux.
 - [mattisklein][mattiskleinGitHub] for the Siri AI eligibility archives from Project Linwood.
 
+[Prognosticate-X]: https://github.com/Prognosticate-X/
+[sbr]: https://github.com/Prognosticate-X/ios27-carrier-lockscreen-research
 [caplayground]: https://caplayground.vercel.app/wallpapers
 [i18n]: https://github.com/awesomenull-dev/gNugget-i18n
 [NuggetLogo]: https://github.com/GoldenNugget-Team/GoldenNugget/blob/main/src/qt/credits/small_nugget.png
