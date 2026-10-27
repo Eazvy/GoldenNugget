@@ -2,11 +2,13 @@
 import re
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QSizePolicy
 
 from src.devicemanagement.device_capabilities import device_text
 from src.gui.widgets import IOSCard
 from src.gui.theme import ColorThemeManager, t, theme_pixmap
+from src.gui.ios.feature_icons import FEATURE_ICONS
 
 _STAGES = {
     "prepare": ("Preparing files", ":/icon/gear.svg"),
@@ -284,7 +286,17 @@ class RestoreProgressCard(IOSCard):
             title = "Unlock your iPhone"
         self.phase_label.setText(self._tr(title))
         icon = ":/icon/lock.svg" if self._category == "authentication" else _STAGES["backup"][1] if self._stage == "backup" else _CATEGORY_ICONS.get(self._category, _STAGES[self._stage][1])
-        self.status_icon.setPixmap(theme_pixmap(icon, colors.accent, 32, self.devicePixelRatioF()))
+        artwork = {"tweaks": "Tweaks", "wallpaper": "PosterBoard", "statusbar": "Status Bar",
+                   "daemons": "Daemons", "icons": "Icon Themes"}.get(
+            self._category, "Tweaks" if self._stage == "tweaks" else None)
+        if artwork and self._category != "authentication":
+            ratio = self.devicePixelRatioF()
+            pixmap = QPixmap(FEATURE_ICONS[artwork]).scaled(
+                round(32 * ratio), round(32 * ratio), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap.setDevicePixelRatio(ratio)
+            self.status_icon.setPixmap(pixmap)
+        else:
+            self.status_icon.setPixmap(theme_pixmap(icon, colors.accent, 32, self.devicePixelRatioF()))
         for key, (step, icon, label) in self._steps.items():
             state = "skipped" if key in self._skipped else "active" if key == self._stage else "complete" if key in self._completed else "pending"
             if step.property("state") != state:

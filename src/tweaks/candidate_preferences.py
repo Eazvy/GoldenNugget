@@ -51,6 +51,9 @@ class InstalledAppSuggestionsBlacklist(BasicPlistTweak):
         super().__init__(FileLocation.suggestionsPreferencesHomeDomain, 'AppCanShowSiriSuggestionsBlacklist')
         self._bundle_ids = None
 
+    def preference_reset_paths(self):
+        return {self.file_location: ((self.key,),)}
+
     async def prepare_for_device(self, udid):
         self._bundle_ids = None
         if not self.enabled:

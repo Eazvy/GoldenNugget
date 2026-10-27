@@ -453,6 +453,10 @@ class IOSHomePage(QWidget):
         from src.gui.ios.restore_progress import RestoreProgressCard
         self.progress_card = RestoreProgressCard(self, compact=True)
         layout.addWidget(self.progress_card)
+        self.operation_status_btn = IOSPrimaryButton(self.tr("Restore Status"))
+        self.operation_status_btn.clicked.connect(self.open_apply_classic)
+        self.operation_status_btn.hide()
+        layout.addWidget(self.operation_status_btn)
         from src.gui.ios.find_my_warning import FindMyWarningCard
         self.find_my_warning = FindMyWarningCard(self.window, self)
         layout.addWidget(self.find_my_warning)
@@ -730,6 +734,8 @@ class IOSHomePage(QWidget):
         dialog.exec()
 
     def set_operation_busy(self, busy):
+        if busy:
+            self.operation_status_btn.show()
         if busy and not self._progress_busy:
             manager = self.window.device_manager
             preferences = manager.pref_manager
