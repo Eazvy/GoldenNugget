@@ -1,7 +1,7 @@
 """Plain-language effects of existing daemon controls."""
 
-DAEMON_DESCRIPTIONS = {'OTA': 'Stops background software-update services and adds a version-change restriction. The '
-        'added restriction is unverified on this iOS version.',
+DAEMON_DESCRIPTIONS = {'OTA': 'Requests disabling the listed software-update services. Does not modify MobileAsset '
+        'preferences or guarantee that every update mechanism is blocked.',
  'UsageTrackingAgent': 'Stops app-usage reports; existing Screen Time restrictions can remain.',
  'GameCenter': 'Stops Game Center sign-in, achievements and online game features.',
  'CrashReports': 'Stops many crash-report and system-log services.',
