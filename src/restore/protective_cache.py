@@ -3,15 +3,14 @@
 The master keeps the FULL Manifest.db (rows for drained payloads stay put)
 so mobilebackup2 can run true incremental refreshes against it: after the
 first apply, each next apply only uploads what actually changed on the
-device. Restores never mutate the master permanently — the apply snapshots
-it under ``<base>/snapshot/<udid>``, prunes and tweak-injects the master in
-place (it IS the Phase 3 restore source), then regenerates the cache from
-the snapshot, returning the master to its full-manifest state.
+device. The master is never modified by an apply — each apply builds a
+disposable *view* of it (a pruned copy of the manifest plus hardlinks to the
+payloads) and restores from that, so a crashed apply cannot leave the master
+half-pruned and the next refresh always diffs against a complete manifest.
 
 The master always lives in the persistent app-data store (never the system
 temp dir): it is the sole copy of user data between Phase 2 (device wipe)
-and Phase 3 (restore), so it must survive reboots and crashes. A leftover
-snapshot from a crashed apply is self-healed on the next refresh.
+and Phase 3 (restore), so it must survive reboots and crashes.
 """
 
 import json
@@ -67,6 +66,13 @@ def peek_cache_info(udid: str) -> Optional[dict]:
 CACHE_PERSIST_MIN_GB = float(os.environ.get("GOLDENNUGGET_CACHE_PERSIST_MIN_GB", "1"))
 # Legacy compatibility constant; apply/reset no longer uses an age-based bypass.
 CACHE_REFRESH_SECS = int(os.environ.get("GOLDENNUGGET_CACHE_REFRESH_SECS", "1800"))
+# The AFC photo store has its own lifetime: photos change far less often
+# than the rest of the protective scope, and re-pulling the whole media tree
+# on every apply is the second-largest cost after the Phase 5 push. A store
+# younger than this is reused as-is; past it the media tree is re-pulled
+# (diffing against what is already local, so only new photos transfer).
+CACHE_MEDIA_REFRESH_SECS = int(
+    os.environ.get("GOLDENNUGGET_CACHE_MEDIA_REFRESH_SECS", "21600"))
 
 
 class ProtectiveBackupCache:
@@ -75,10 +81,9 @@ class ProtectiveBackupCache:
     The master keeps the FULL Manifest.db (rows for drained payloads stay put)
     so mobilebackup2 can run true incremental refreshes against it: after the
     first apply, each next apply only uploads what actually changed on the
-    device. Restores never mutate the master permanently — the apply snapshots
-    it under ``<base>/snapshot/<udid>``, prunes and tweak-injects the master in
-    place (it IS the Phase 3 restore source), then regenerates the cache from
-    the snapshot, returning the master to its full-manifest state.
+    device. The master is never modified by an apply — each apply builds a
+    disposable view of it and restores from that, so the master stays a
+    pristine full-manifest mirror whatever happens during the restore.
     """
 
     def __init__(self, udid: str, product_version: str, encrypted: bool = False):
@@ -102,6 +107,11 @@ class ProtectiveBackupCache:
         # objects. It sits OUTSIDE ``master_root`` so working copies and the
         # manifest prune never touch it.
         self.media_dir = self.base / "media" / self.udid
+        # Per-apply restore views live here. Deliberately on the SAME
+        # filesystem as the master so the view's payload hardlinks stay links
+        # instead of degrading into full copies of every payload.
+        self.view_root = self.base / "view"
+
 
     def locate(self) -> Optional[dict]:
         """Find an existing master across both bases; point homes at it.
@@ -133,8 +143,15 @@ class ProtectiveBackupCache:
             self.device_dir = master
             self.info_path = info_path
             self.media_dir = base / "media" / self.udid
+            self.view_root = base / "view"
             created = int(info.get("created_ts", now))
-            return {"base": base, "info": info, "age_secs": max(0, now - created)}
+            # A cache written before the media store got its own clock has no
+            # ``media_ts`` — treat its media as the same age as the master, so
+            # it is refreshed rather than trusted indefinitely.
+            media_created = int(info.get("media_ts", created))
+            return {"base": base, "info": info,
+                    "age_secs": max(0, now - created),
+                    "media_age_secs": max(0, now - media_created)}
         return None
 
     def _set_home(self, base: Path):
@@ -143,6 +160,7 @@ class ProtectiveBackupCache:
         self.device_dir = self.master_root / self.udid
         self.info_path = base / f"{self.udid}.json"
         self.media_dir = base / "media" / self.udid
+        self.view_root = base / "view"
 
     def relocate_by_size(self):
         """Legacy no-op (kept for the placement test tool).
@@ -156,6 +174,22 @@ class ProtectiveBackupCache:
     def has_valid_master(self) -> bool:
         return self.locate() is not None
 
+    def build_view(self) -> str:
+        """Build the per-apply restore view of the master.
+
+        Returns the view's parent directory (the layout the restore code
+        expects: ``<parent>/<udid>/Manifest.db``). The master is left
+        untouched — the view is what gets pruned and tweak-injected.
+        """
+        from src.restore.protective import make_restore_view
+        return make_restore_view(str(self.master_root), self.udid,
+                                 str(self.view_root))
+
+    def discard_view(self) -> None:
+        """Remove the per-apply restore view (it is disposable)."""
+        from src.restore.protective import discard_restore_view
+        discard_restore_view(str(self.view_root), self.udid)
+
     async def refresh(self, lockdown_client: LockdownClient, progress_callback=None,
                       include_photos: bool = True, include_posterboard: bool = False,
                       include_keychain: bool = False,
@@ -168,19 +202,9 @@ class ProtectiveBackupCache:
 
         With ``include_afc_media`` the bulk photo trees go over AFC into the
         persistent per-device media store (``media_dir``), pulled as a diff
-        (only new/changed objects) on every refresh — the cache photo store.
+        (only new/changed objects) — the cache photo store.
         """
-        from src.restore.protective import perform_protective_backup, regenerate_cache_from_snapshot
-
-        # Self-heal: a crashed apply leaves a modified (pruned + tweak-injected)
-        # master beside its take-before snapshot. Regenerate first so the
-        # incremental refresh below diffs against the pristine full-manifest
-        # state, never a half-applied one.
-        snap_base = self.base / "snapshot"
-        if (snap_base / self.udid).is_dir():
-            _logger.warning("Leftover cache snapshot found — regenerating master "
-                            "from it before refreshing (crashed apply?)")
-            regenerate_cache_from_snapshot(str(snap_base), str(self.master_root), self.udid)
+        from src.restore.protective import perform_protective_backup
 
         valid = self.has_valid_master()
         mode = "incremental" if valid else "full"
@@ -195,12 +219,72 @@ class ProtectiveBackupCache:
             afc_media_diff=True)
 
         self.base.mkdir(parents=True, exist_ok=True)
+        now = int(time.time())
+        # Preserve the media timestamp when this refresh did NOT touch the
+        # photo store — the media tree has its own, much longer lifetime.
+        media_ts = now if include_afc_media else self._last_media_ts()
         with open(self.info_path, "w", encoding="utf-8") as f:
             json.dump({"udid": self.udid,
                        "filter_revision": CACHE_FILTER_REVISION,
                        "product_version": self.product_version,
                        "encrypted": is_encrypted,
                        "media_afc": include_afc_media,
-                       "created_ts": int(time.time()),
+                       "created_ts": now,
+                       "media_ts": media_ts,
                        "created": time.strftime("%Y-%m-%d %H:%M:%S")}, f)
         return str(self.master_root)
+
+    def _last_media_ts(self) -> int:
+        """Timestamp of the last media pull (0 when it never happened)."""
+        try:
+            with open(self.info_path, "r", encoding="utf-8") as f:
+                info = json.load(f)
+            return int(info.get("media_ts", 0))
+        except Exception:
+            return 0
+
+    def media_age_secs(self) -> int:
+        """Age of the AFC photo store in seconds (0 when it never happened)."""
+        ts = self._last_media_ts()
+        if not ts:
+            return 0
+        return max(0, int(time.time()) - ts)
+    async def refresh_media(self, lockdown_client: LockdownClient,
+                            progress_callback=None) -> str:
+        """Re-pull the AFC photo store without touching the master.
+
+        The photo store is the safety net for the device's media, so it has
+        its own freshness window. When the master is still fresh but the photo
+        store has aged out, this pulls the photos (as a diff — only new or
+        changed objects transfer) instead of forcing a full master refresh
+        that would re-read the whole protective scope as well.
+        """
+        from src.restore.afc_media import backup_media_via_afc
+
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+        await backup_media_via_afc(lockdown_client, str(self.media_dir),
+                                    progress_callback=progress_callback,
+                                    diff=True)
+        now = int(time.time())
+        # Update only the media timestamp — the rest of the record (udid,
+        # product_version, encryption) must survive, or the cache would no
+        # longer be locatable and the next refresh would start from scratch.
+        info = {}
+        try:
+            with open(self.info_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                info = loaded
+        except Exception:
+            info = {}
+        info.setdefault("udid", self.udid)
+        info.setdefault("product_version", self.product_version)
+        info.setdefault("encrypted", self.encrypted)
+        info.setdefault("media_afc", True)
+        info["media_ts"] = now
+        info.setdefault("created_ts", now)
+        self.base.mkdir(parents=True, exist_ok=True)
+        with open(self.info_path, "w", encoding="utf-8") as f:
+            json.dump(info, f)
+        return str(self.media_dir)
+

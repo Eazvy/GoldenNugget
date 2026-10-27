@@ -429,6 +429,32 @@ async def _backup_media_tree(afc_lockdown_client, root: str, diff: bool,
     return tally
 
 
+async def _device_media_inventory(afc) -> dict:
+    """Map the media trees currently on the DEVICE to their sizes.
+
+    The mirror image of :func:`_media_inventory`, but read back from the
+    device over AFC. Used to decide which files still have to be pushed:
+    a file the device already holds at the same size needs no transfer.
+
+    Symlinks are skipped (they are never pushed), and a directory that
+    cannot be listed is skipped as well — the caller then pushes the files
+    it could not confirm, which is the safe direction (never skip a file
+    that might be missing).
+    """
+    inventory = {}
+    entries: list = []
+    failed: list = []
+    for name in sorted(AFC_MEDIA_TREES):
+        try:
+            await _list_afc_tree(afc, f"/{name}", entries, "warn", failed)
+        except Exception as e:  # noqa: BLE001 - a tree we cannot read is not fatal
+            log_warn(f"AFC media: could not list /{name} on the device: {e} "
+                     f"— files below it will be re-pushed")
+    for _src, rel, st in entries:
+        inventory[rel] = int(st.get("st_size", 0))
+    return inventory
+
+
 async def _push_one(afc, src: str, remote_rel: str) -> int:
     """Stream and verify every write, including small and empty files."""
     async with _local_file(open, src, "rb") as source:
@@ -667,16 +693,30 @@ async def restore_media_via_afc(lockdown_client, media_root: str,
                                 progress_callback=None,
                                 on_error: str = "raise",
                                 prompt_choice=None,
-                                unlock_prompt=None, include_historical=True) -> BackupTransferResult:
+                                unlock_prompt=None,
+                                diff: bool = True,
+                                include_historical: bool = True) -> dict:
     """Push a previously pulled Media tree back to the device over AFC.
 
     Mirrors ``media_root`` (which holds the AFC root layout: DCIM/, PhotoData/,
     ...) back onto the device after the iOS 27 security-recovery wipe. Returns
-    a tally dict ``{"files": int, "bytes": int}``.
+    a tally dict ``{"files": int, "bytes": int, "skipped": int}``.
 
     The device has just rebooted, so the AFC open waits out a locked screen
     first (see ``open_afc_for_media``) -- pass ``prompt_choice`` to get the
     Abort/Resume prompt if that wait runs out.
+
+    With ``diff=True`` (the default) only the files the device is actually
+    missing (or holds at a different size) are transferred. The device's
+    current media tree is inventoried over AFC and compared against the store
+    with the same size rule the pull side uses, so a store that is already
+    in sync costs one directory listing and no transfer at all. This is what
+    makes a repeat apply cheap: the photos are already on the device and do
+    not need to go up the cable again.
+
+    A file the device holds at the same size is skipped -- the identical rule
+    the pull-side diff uses. A file the device holds at a *different* size is
+    still pushed, so the store stays authoritative for anything that differs.
     """
     root = os.path.abspath(media_root)
     if not os.path.isdir(root):
@@ -691,62 +731,74 @@ async def restore_media_via_afc(lockdown_client, media_root: str,
         inventory = current['entries'] if current else await _disk_io(_media_inventory, root)
     except (OSError, ValueError) as e:
         raise NuggetException(f"Cannot read AFC media store ({root}): {e}") from e
+
     total_files = len(inventory)
     total_bytes = sum(inventory.values())
     if not total_files:
         raise NuggetException(f"AFC media store has no photo/video payloads ({root})")
-    # Keep only the required inventory; materialize local paths per small batch.
-    # Fresh path/link checks still run in the disk worker before every batch.
-    entries = iter(sorted(inventory))
+
+    entries = sorted(inventory.items())
 
     async with _pausable_media_connection(lockdown_client, _log, prompt_choice, unlock_prompt) as checkpoint:
         done_files = 0
         done_bytes = 0
+        skipped = 0
         failed: list[str] = []
         made_dirs: set = set()
-        from itertools import islice
-        remaining = entries
-        afc = await checkpoint()
-        while relatives := list(islice(remaining, _afc_concurrency(afc))):
-            batch = await _disk_io(lambda: [(str(_local_media_path(root, rel)), rel)
-                                            for rel in relatives])
-            # Pause/reconnect only when no file tasks use the current socket.
-            # Directory creation is also serialized so a permission retry can
-            # replace the connection without invalidating an in-flight write.
-            afc = await checkpoint()
-            for _, rel in batch:
-                afc = await _wait_for_media_directory(
-                    checkpoint, posixpath.dirname(f"/{rel}"), made_dirs, _log, prompt_choice)
-            async def push(entry):
-                nonlocal done_files, done_bytes
-                src, rel = entry
-                remote = f"/{rel}"
-                n = 0
-                try:
-                    n = await _push_one(afc, src, remote)
-                except Exception as error:
-                    msg = f"AFC media: failed to restore {remote}: {error}"
-                    if on_error == "warn":
-                        log_warn(msg)
-                        failed.append(remote)
-                    else:
-                        raise NuggetException(msg) from error
-                done_files += 1
-                done_bytes += n
-                if done_files % 25 == 0 or done_files == total_files:
-                    _log(_progress_str("Restoring photos/videos over AFC",
-                                       done_files, total_files, done_bytes, total_bytes))
-            await _run_workers(batch, push, min(len(batch), _afc_concurrency(afc)))
 
-        log_info(f"AFC media restore complete: {done_files} files, "
-                 f"{done_bytes / (1024 * 1024):.1f} MB")
-        if not include_historical and current is None and not failed:
-            raise NuggetException(
-                "The media store could not be verified. Available files were restored, "
-                "but photo restoration is incomplete. Keep the local media backup.")
-        if failed:
-            log_warn(f"AFC media restore: {len(failed)} files failed "
-                     f"(e.g. {failed[:3]})")
-            tally = {"files": done_files, "bytes": done_bytes, "failed": failed}
-            return tally
-    return {"files": done_files, "bytes": done_bytes}
+        device_sizes: dict = {}
+        if diff:
+            try:
+                device_sizes = await _device_media_inventory(await checkpoint())
+            except Exception as e:  # noqa: BLE001 - fall back to pushing everything
+                log_warn(f"AFC media: could not inventory the device media tree "
+                         f"({e}) — pushing every file")
+                device_sizes = {}
+
+        pending = []
+        for rel, size in entries:
+            if rel in device_sizes and device_sizes.get(rel) == size:
+                skipped += 1
+                continue
+            pending.append((rel, size))
+
+        if skipped:
+            log_info(f"AFC media: {skipped} of {len(entries)} files are already "
+                     f"on the device at the same size — not re-transferring them")
+        pending_bytes = sum(size for _rel, size in pending)
+
+        for rel, size in pending:
+            src = str(await _disk_io(_local_media_path, root, rel))
+            remote = f"/{rel}"
+            try:
+                afc = await _wait_for_media_directory(
+                    checkpoint, posixpath.dirname(remote), made_dirs, _log, prompt_choice)
+                n = await _push_one(afc, src, remote)
+            except Exception as e:
+                msg = f"AFC media: failed to restore {remote}: {e}"
+                if on_error == "warn":
+                    log_warn(msg)
+                    failed.append(rel)
+                else:
+                    raise NuggetException(msg) from e
+            done_files += 1
+            done_bytes += n
+            if done_files % 25 == 0 or done_files == len(pending):
+                _log(_progress_str("Restoring photos/videos over AFC",
+                                   done_files, len(pending), done_bytes, pending_bytes))
+
+        log_info(f"AFC media restore complete: {done_files} files pushed, "
+                 f"{skipped} already on the device, "
+                 f"{done_bytes / (1024 * 1024):.1f} MB transferred")
+
+    if failed:
+        log_warn(f"AFC media restore: {len(failed)} files failed (e.g. {failed[:3]})")
+        return {"files": done_files, "bytes": done_bytes, "skipped": skipped,
+                "failed": failed}
+
+    if not include_historical and current is None and not failed:
+        raise NuggetException(
+            "The media store could not be verified. Available files were restored, "
+            "but photo restoration is incomplete. Keep the local media backup.")
+
+    return {"files": done_files, "bytes": done_bytes, "skipped": skipped}

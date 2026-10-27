@@ -379,9 +379,13 @@ class RestoreCacheThread(QThread):
                 # done, so an incomplete push must abort the apply instead of
                 # letting it report success with missing media
                 self.update_label(
-                    f"Restoring photos/videos over AFC ({describe_media_store(media_dir, verify=False)})...")
+                    f"Restoring photos/videos over AFC ({describe_media_store(media_dir)})...")
+                # diff=False: this is an explicit "restore my data" recovery —
+                # the store's copy must win over whatever the device holds, even
+                # at the same size (the files may be corrupt on the device).
                 pushed = await restore_media_via_afc(
                     lc, media_dir, progress_callback=self._progress_cb,
+                    diff=False,
                     prompt_choice=self.prompt_user_choice,
                     unlock_prompt=(
                         QCoreApplication.tr("Device stayed locked"),

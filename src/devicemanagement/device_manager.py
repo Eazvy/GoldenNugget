@@ -1137,12 +1137,15 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
 
             media_src = str(cache.media_dir) if use_afc_media else ""
             prepared = PreparedBackup(root=master_root, manifest_password=manifest_password,
-                                      master=True, media_src=media_src)
+                                      master=True, view_root=str(cache.view_root),
+                                      media_src=media_src)
             if needs_posterboard and encrypted:
                 log_warn("Encrypted cache cannot yield a readable PosterBoard DB — "
                          "falling back to a separate backup")
                 return prepared, False
-            return prepared, _register_pb_db(master_root)
+            if pb_from_cache:
+                return prepared, _register_pb_db(master_root)
+            return prepared, False
 
     async def refresh_backup_cache(self, update_label=lambda x: None) -> str:
         """Force a refresh of the backup cache master for the current device.
