@@ -149,7 +149,7 @@ def show_apply_error(e: Exception, update_label=lambda x: None, files_list: list
             QCoreApplication.tr('Feature flag overrides cannot be prepared from this backup. Set feature-flag controls to Not Used before applying other changes.'),
             title=QCoreApplication.tr('Feature flag baseline unavailable'),
             detailed_txt=str(e), backup_path=backup_path,
-            action_id='clear_feature_flag_selections')
+            exc_type=type(e), exc_value=e)
     elif isinstance(e, NuggetException):
         return ApplyAlertMessage(str(e), detailed_txt=e.detailed_text,
                                  backup_path=backup_path)
