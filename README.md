@@ -283,9 +283,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 
 ## Credits
 - [awesomenull] Lead developer
-- [Wind0ws11Aero] for helping with development a lot.
+- [Wind0ws11Aero] Co-developer
 - [kik4311] Co-developer
-- [mekabrine][mekabrineDiscord] for the logo and app icon artwork.
+- [mekabrine][mekabrineDiscord] for icons artwork in new ui.
 - [Eazvy][EazvyGitHub] for interface improvements and the home feature artwork.
 - [Lucide contributors][LucideGitHub] for the interface icons.
 - [Rasmus Andersson][rsmsGitHub] for the Inter font.
