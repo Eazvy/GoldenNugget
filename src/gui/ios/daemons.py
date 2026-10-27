@@ -280,7 +280,7 @@ class IOSDaemonsContent(QWidget):
 
     def _build_rows(self, layout, c):
         for title, daemon in [
-            (QCoreApplication.translate("Nugget", 'Disable OTA Updates'), Daemon.OTA),
+            (QCoreApplication.translate("Nugget", 'Disable OTA Update Services'), Daemon.OTA),
             (QCoreApplication.translate("Nugget", 'Disable App Usage Reports'), Daemon.UsageTrackingAgent),
             (QCoreApplication.translate("Nugget", 'Disable Game Center'), Daemon.GameCenter),
             (QCoreApplication.translate("Nugget", 'Disable Tips Suggestions'), Daemon.Tips),

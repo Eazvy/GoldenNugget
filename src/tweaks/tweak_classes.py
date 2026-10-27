@@ -289,20 +289,7 @@ class AdvancedPlistTweak(BasicPlistTweak):
 
 
 class DaemonPlistTweak(AdvancedPlistTweak):
-    def apply_tweak(self, other_tweaks: dict) -> dict:
-        other_tweaks = super().apply_tweak(other_tweaks)
-        if not self.enabled:
-            return other_tweaks
-        from .daemons_tweak import Daemon
-        values = self._filter_keys(self.value)
-        if not any(key in values for key in Daemon.OTA.value):
-            return other_tweaks
-        target = other_tweaks.setdefault(FileLocation.ota, {})
-        if any(values.get(key) is True for key in Daemon.OTA.value):
-            target["MobileAssetSUAllowOSVersionChange"] = False
-        else:
-            target.pop("MobileAssetSUAllowOSVersionChange", None)
-        return other_tweaks
+    """Daemon selections only; unrelated preferences require separate edits."""
 
 
 class TriStateBooleanPlistTweak(BasicPlistTweak):
