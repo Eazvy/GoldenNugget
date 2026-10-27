@@ -88,8 +88,22 @@ def _merge_preference_payload(original, patch, *, feature_flags=False):
                     raise ValueError('Feature flag entries must be dictionaries.')
                 target.setdefault(key, {}).update(values)
     else:
-        existing.update(changes)
+        _merge_preference_dictionary(existing, changes)
     return plistlib.dumps(existing, fmt=plistlib.FMT_BINARY, sort_keys=False)
+
+
+def _merge_preference_dictionary(existing, changes):
+    for key, value in changes.items():
+        if isinstance(value, dict) and value and '$archiver' not in value:
+            current = existing.get(key)
+            if current is None and key not in existing:
+                existing[key] = value
+            elif not isinstance(current, dict) or '$archiver' in current:
+                raise ValueError('Nested preference edits require a dictionary baseline.')
+            else:
+                _merge_preference_dictionary(current, value)
+        else:
+            existing[key] = value
 
 
 def _same_plist_value(left, right):
@@ -135,7 +149,8 @@ def _prepare_preference_merges(conn, device_dir, files):
             row = conn.execute('SELECT fileID FROM Files WHERE domain=? AND relativePath=? AND flags=1',
                                (domain, path)).fetchone()
             if row is None:
-                if _can_skip_missing_preference_baseline(domain, path):
+                if (_can_skip_missing_preference_baseline(domain, path)
+                        and not isinstance(contents, PreferenceKeyReset)):
                     skipped = preference_baseline_skips.get()
                     if skipped is not None:
                         skipped.append(f'{domain}/{path}')

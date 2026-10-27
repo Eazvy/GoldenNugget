@@ -12,6 +12,15 @@ PAGE_SECTIONS = {Page.Springboard: Section.SPRINGBOARD,
                  Page.LiquidGlass: Section.LIQUID_GLASS}
 
 
+def _leaf_paths(values, prefix=()):
+    for key, value in values.items():
+        path = prefix + (key,)
+        if isinstance(value, dict) and value and '$archiver' not in value:
+            yield from _leaf_paths(value, path)
+        else:
+            yield path
+
+
 def remaining_reset_entries(entries, pages):
     sections = {PAGE_SECTIONS[page] for page in pages if page in PAGE_SECTIONS}
     specs = {spec.id.name: spec for spec in SPECS}
@@ -42,6 +51,11 @@ def preference_reset_plan(entries, pages):
         if not isinstance(tweak, BasicPlistTweak):
             # Eligibility archives and PosterKit have separate reset mechanisms.
             continue
+        reset_paths = getattr(tweak, 'preference_reset_paths', None)
+        if reset_paths is not None:
+            for location, keys in reset_paths().items():
+                paths[location].update(keys)
+            continue
         with suspend_tweak_notifications():
             tweak.set_value(entry['value'])
             payloads = tweak.apply_tweak({})
@@ -51,5 +65,5 @@ def preference_reset_plan(entries, pages):
                     paths[location].update((domain, flag, field)
                                            for flag, fields in flags.items() for field in fields)
             else:
-                paths[location].update((key,) for key in values)
+                paths[location].update(_leaf_paths(values))
     return {location: PreferenceKeyReset(keys) for location, keys in paths.items()}

@@ -1473,6 +1473,9 @@ class ApplyMixin:
 
 
     def apply_changes(self, reset_pages: list=None):
+        if self.apply_in_progress or getattr(self, '_cache_restore_in_progress', False):
+            self.show_ios_page(6)
+            return
         if not self.device_manager.get_current_device_udid():
             QtWidgets.QMessageBox.information(
                 self, QCoreApplication.translate("Nugget", "No device connected"),
@@ -1815,6 +1818,13 @@ class ApplyMixin:
 
     def toggle_thread_btns(self, disabled: bool):
         self.ios_home.support_panel.show()
+        experience = getattr(self, 'liquid', None)
+        if experience is not None:
+            experience.restore_button.setDisabled(
+                disabled or self.apply_in_progress or getattr(self, '_cache_restore_in_progress', False))
+            if disabled:
+                experience.restore.hide()
+                experience.restore_changes_panel.hide()
         self.ios_home.set_operation_busy(self.apply_in_progress or getattr(self, "_cache_restore_in_progress", False))
         if disabled or not self.apply_in_progress:
             self.ios_apply.set_busy(disabled)

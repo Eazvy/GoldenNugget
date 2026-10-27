@@ -1423,8 +1423,8 @@ Returns (PreparedBackup, posterboard_db_ok). When the PosterBoard
                     pass
                 elif page == Page.Templates:
                     ## COMMUNITY TWEAKS FROM TEMPLATES
-                    from src.tweaks.posterboard.community_tweaks import load_record, reset_plan
-                    to_empty, community_leftover = reset_plan(load_record(udid))
+                    from src.tweaks.posterboard.community_tweaks import load_record, reset_plan as community_reset_plan
+                    to_empty, community_leftover = community_reset_plan(load_record(udid))
                     files_to_null.extend(path for path in to_empty if path not in files_to_null)
                 elif page == Page.InternalOptions:
                     pass
