@@ -963,6 +963,10 @@ class NavigationMixin:
         """Handle ESC and the mouse back button as navigation-back."""
         if QtWidgets.QApplication.activeModalWidget() is not None:
             return False
+        # The filter is application-wide; separate windows own their Escape
+        # and mouse-back events, even when parented to the main window.
+        if not isinstance(obj, QtWidgets.QWidget) or obj.window() is not self:
+            return False
         try:
             etype = event.type()
         except (AttributeError, TypeError):

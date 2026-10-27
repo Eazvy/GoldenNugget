@@ -73,6 +73,8 @@ class IOSSettingsPage(QWidget):
         accent_row.setContentsMargins(16, 12, 16, 12)
         accent_row.setSpacing(12)
         accent_label = QLabel(QCoreApplication.translate("Nugget", "Accent Color"))
+        self._style_label(accent_label, 'row_title')
+        accent_label.setWordWrap(True)
         accent_row.addWidget(accent_label, 1)
         self._accent_picker = AccentPicker()
         accent_row.addWidget(self._accent_picker)
@@ -705,32 +707,11 @@ class IOSSettingsPage(QWidget):
         return card
 
     def _on_text_row_edit(self, title: str, on_submit):
-        c = self._tm.colors
         dialog = QInputDialog(self)
         dialog.setWindowTitle(title)
         dialog.setLabelText(QCoreApplication.translate("Nugget", "Enter value:"))
         dialog.setTextValue(self.window.device_manager.pref_manager.organization_name)
-        dialog.setStyleSheet(f"""
-            QDialog, QInputDialog {{ background-color: {c.bg_primary}; }}
-            QLabel {{ color: {c.text_primary}; font-size: 15px; }}
-            QLineEdit {{
-                background-color: {c.bg_input};
-                border: none;
-                border-radius: 10px;
-                color: {c.text_primary};
-                font-size: 15px;
-                padding: 10px 14px;
-            }}
-            QPushButton {{
-                background-color: {c.accent};
-                border-radius: 10px;
-                color: {c.text_primary};
-                font-size: 15px;
-                font-weight: 600;
-                padding: 10px 20px;
-                border: none;
-            }}
-        """)
+        dialog.setStyleSheet(t("text_input_dialog"))
         if dialog.exec() == QDialog.Accepted:
             text = dialog.textValue()
             on_submit(text)
@@ -861,9 +842,10 @@ class IOSSettingsPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         self.history_list = QListWidget()
         self.history_list.setMinimumHeight(120)
-        self.history_search = QLineEdit()
+        self.history_search = IOSSearchField()
         self.history_search.setPlaceholderText(QCoreApplication.translate(
             "Nugget", "Search history..."))
+        self.history_search.setAccessibleName(self.history_search.placeholderText())
         self.history_search.textChanged.connect(self._refresh_history)
         layout.addWidget(self.history_search)
         filters = QHBoxLayout()

@@ -139,6 +139,7 @@ STYLES = {
         }}
         QPushButton#iosCollapsibleHeader:hover {{ background: transparent; }}
         QPushButton#iosCollapsibleHeader:checked {{ color: {text_primary}; }}
+        QPushButton#iosCollapsibleHeader:focus {{ color: {accent}; }}
     """,
 
     "card": """
@@ -704,7 +705,7 @@ STYLES = {
     """,
 
     # ---- Home ------------------------------------------------------------
-    "home_title": "font-size: 32px; font-weight: 700; color: {text_primary};",
+    "home_title": "font-size: 32px; font-weight: 700; color: {text_primary}; background-color: transparent;",
     "home_subtitle": "color: {text_secondary}; font-size: 13px; font-weight: 500; background: transparent;",
 
     "home_combo": """

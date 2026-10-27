@@ -1,7 +1,7 @@
 from PySide6.QtCore import QCoreApplication, Qt, QSize, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QDialog, QLabel, QHBoxLayout, QPushButton, QFrame
+    QWidget, QVBoxLayout, QScrollArea, QDialog, QLabel, QHBoxLayout, QBoxLayout, QPushButton, QFrame
 )
 
 from src.gui.ios.components import (
@@ -75,7 +75,7 @@ class IOSSectionContent(QWidget):
             (QCoreApplication.translate("Nugget", "Favorites"), "favorites"),
         ], self)
         self.filter_control.setAccessibleName(QCoreApplication.translate("Nugget", "Tweak filter"))
-        search_row = QHBoxLayout()
+        self._search_row = search_row = QHBoxLayout()
         search_row.setContentsMargins(16, 16, 16, 0)
         search_row.setSpacing(8)
         search_row.addWidget(self.search, 1)
@@ -109,6 +109,7 @@ class IOSSectionContent(QWidget):
         ColorThemeManager.instance().theme_changed.connect(self._refresh_action_icons)
 
     def showEvent(self, event):
+        self._fit_search_row()
         if self._inner is None and not getattr(self, "_building", False):
             self.rebuild()
         super().showEvent(event)
@@ -125,6 +126,24 @@ class IOSSectionContent(QWidget):
                 if editor is not None:
                     editor.setEnabled(checked and switch.isEnabled())
             self._apply_search()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._fit_search_row()
+
+    def _fit_search_row(self):
+        """Keep search usable when translated filters need a second row."""
+        margins = self._search_row.contentsMargins()
+        filter_width = max(self.filter_control.sizeHint().width(),
+                           self.filter_control.minimumWidth())
+        required = (margins.left() + margins.right() + 240
+                    + self._search_row.spacing() + filter_width)
+        stacked = self.width() < required
+        self._search_row.setDirection(
+            QBoxLayout.TopToBottom if stacked else QBoxLayout.LeftToRight)
+        self._search_row.setStretch(0, 0 if stacked else 1)
+        self._search_row.setAlignment(
+            self.filter_control, Qt.AlignLeading if stacked else Qt.Alignment())
 
     def _offer_untested_tweaks(self):
         from src.gui.ios.compat import _parse_version

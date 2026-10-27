@@ -64,7 +64,7 @@ class IOSApplyPage(QWidget):
         self.preview_btn = QPushButton(QCoreApplication.translate(
             "DeviceTwin", "Preview on iPhone"))
         self.preview_btn.setCursor(Qt.PointingHandCursor)
-        self.preview_btn.setMinimumHeight(40)
+        self.preview_btn.setMinimumHeight(44)
         self.preview_btn.setToolTip(QCoreApplication.translate(
             "DeviceTwin", "See the Lock Screen and Home Screen with the selected tweaks before applying."))
         self.preview_btn.clicked.connect(self.window.show_device_twin)
@@ -109,7 +109,7 @@ class IOSApplyPage(QWidget):
         self.find_my_warning = FindMyWarningCard(self.window, self)
         content_layout.addWidget(self.find_my_warning)
         self.pause_btn = QPushButton(self.tr("Pause photo transfer"))
-        self.pause_btn.setMinimumHeight(40)
+        self.pause_btn.setMinimumHeight(44)
         self.pause_btn.clicked.connect(self._toggle_pause)
         self.pause_btn.hide()
         content_layout.addWidget(self.pause_btn)

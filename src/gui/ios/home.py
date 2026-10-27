@@ -246,7 +246,7 @@ class IOSHomePage(QWidget):
         title_layout.setSpacing(8)
         title_layout.setAlignment(Qt.AlignTop)
         self._title = QLabel(QCoreApplication.translate("Nugget", "GoldenNugget"), self)
-        self._title.setStyleSheet(t("home_title") + "color: white;")
+        self._title.setStyleSheet(t("home_title"))
         self._title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         title_layout.addWidget(self._title)
 
@@ -569,7 +569,7 @@ class IOSHomePage(QWidget):
         self._scroll.setStyleSheet(f"background-color: {c.bg_primary}; border: none;")
         if self._logo.pixmap() is None or self._logo.pixmap().isNull():
             self._logo.setStyleSheet(f"background-color: {c.bg_secondary}; border-radius: 14px;")
-        self._title.setStyleSheet(t("home_title") + "color: white;")
+        self._title.setStyleSheet(t("home_title"))
         self.subtitle.setStyleSheet(t("home_subtitle"))
         self.community_links._retheme()
         self._style_control_tabs()
