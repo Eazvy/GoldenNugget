@@ -30,7 +30,7 @@ from src.gui.version import App_Build, App_Version
 from src.gui.ios.theme_manager import ThemeManager
 from src.gui.ios.tweaks import _hidden_feature_names
 from src.gui.pages.pages_list import Page
-from src.tweaks.tweak_classes import set_tweak_change_callback
+from src.gui.autosave import AutosaveMixin
 from src.tweaks.tweaks import tweaks, TweakID
 
 
@@ -542,7 +542,7 @@ class DeviceBarMixin:
         return True
 
 
-class SettingsMixin:
+class SettingsMixin(AutosaveMixin):
     """Settings/preset loading, theme switching and app-version label."""
 
     def loadSettings(self):
@@ -615,52 +615,6 @@ class SettingsMixin:
         last_preset = self.settings.value("last_loaded_preset", "", type=str)
         if last_preset:
             self.preset_manager.load_preset(last_preset)
-
-
-    def _register_tweak_autosave(self):
-        """Register callback to auto-save preset when tweaks change."""
-        set_tweak_change_callback(self._on_tweak_changed)
-
-
-    def _on_tweak_changed(self):
-        """Called when any tweak value changes - schedule autosave."""
-        # Keep the visible section counts in sync while the user is toggling
-        # controls; these widgets intentionally do not rebuild the whole page
-        # for every switch change.
-        try:
-            for page in getattr(self, "ios_pages", []):
-                content = getattr(page, "content", None)
-                if content is not None and hasattr(content, "refresh_section_counts"):
-                    content.refresh_section_counts()
-        except Exception:
-            pass
-        if hasattr(self, "ios_home"):
-            self.ios_home.selection_counts_requested.emit()
-        if not self.autosave_enabled():
-            # Still registered (so the callback is never dangling) but inert:
-            # no debounce timer is even scheduled while the option is off.
-            return
-        if self._preset_autosave_pending:
-            return
-        self._preset_autosave_pending = True
-        # Debounce: save after 500ms of no changes
-        QtCore.QTimer.singleShot(500, self._save_autosave_preset)
-
-
-    def _save_autosave_preset(self):
-        """Save current tweak state to AutoSave preset."""
-        self._preset_autosave_pending = False
-        if not self.autosave_enabled():
-            # Second guard: a debounce timer scheduled before the switch was
-            # flipped off still fires, and must not resurrect the file.
-            return
-        try:
-            self.preset_manager.save_preset(
-                "AutoSave", "Automatic save of last tweak configuration", tags=["auto"],
-                device_model=self.device_manager.get_current_device_model() or "",
-                ios_version=self.device_manager.get_current_device_version() or "")
-        except Exception:
-            pass  # Silent fail - autosave is best-effort
 
 
     def sidebar_enabled(self) -> bool:

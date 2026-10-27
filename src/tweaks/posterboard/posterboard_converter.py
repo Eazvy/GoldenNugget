@@ -177,6 +177,20 @@ class ConversionError(Exception):
     """Raised when a legacy descriptor cannot be modernized."""
 
 
+class ConversionStageError(ConversionError):
+    def __init__(self, descriptor, stage, cause):
+        self.descriptor, self.stage = descriptor, stage
+        super().__init__(f"{stage} failed for {descriptor}: {cause}")
+
+
+def _conversion_stage(descriptor, stage, operation, *args):
+    """Keep the conservative conversion order and expose the failing stage."""
+    try:
+        return operation(*args)
+    except Exception as exc:
+        raise ConversionStageError(descriptor, stage, exc) from exc
+
+
 def parse_logical_screen_class(value) -> "tuple[int, int, int] | None":
     """``"390w-844h@3x~iphone"`` -> ``(390, 844, 3)`` (``None`` when unparsable)."""
     match = LOGICAL_SCREEN_RE.match(str(value or ""))
@@ -1017,18 +1031,22 @@ def convert_descriptor(descriptor_dir: str,
         if not role:
             continue
         changed_files.extend(
-            modernize_plane(plane_dir, role, doc_width, doc_height, doc_width, pixel_scale))
+            _conversion_stage(descriptor_dir, f"Modernize {role}", modernize_plane,
+                              plane_dir, role, doc_width, doc_height, doc_width, pixel_scale))
         converted_planes.append(role)
 
     changed_files.extend(
-        synthesize_foreground_plane(wallpaper_dir, doc_width, doc_height, pixel_scale))
+        _conversion_stage(descriptor_dir, "Synthesize foreground", synthesize_foreground_plane,
+                          wallpaper_dir, doc_width, doc_height, pixel_scale))
     if "Foreground" not in converted_planes and os.path.isdir(
             os.path.join(wallpaper_dir, "foreground.ca")):
         converted_planes.append("Foreground")
 
-    modernize_wallpaper_plist(wallpaper_dir, max_multiplier)
+    _conversion_stage(descriptor_dir, "Update Wallpaper.plist", modernize_wallpaper_plist,
+                      wallpaper_dir, max_multiplier)
     changed_files.append(os.path.join(wallpaper_dir, "Wallpaper.plist"))
-    changed_files.extend(write_depth_configs(wallpaper_dir))
+    changed_files.extend(_conversion_stage(descriptor_dir, "Write depth configuration",
+                                           write_depth_configs, wallpaper_dir))
     return {
         "descriptor": descriptor_dir,
         "wallpaper": os.path.basename(wallpaper_dir),

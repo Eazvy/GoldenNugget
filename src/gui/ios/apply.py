@@ -136,7 +136,7 @@ class IOSApplyPage(QWidget):
         elif control.state == "available":
             from src.gui.dialogs.confirmation import ask_confirmation
             if ask_confirmation(self, self.tr("Pause photo transfer?"),
-                self.tr("Are you sure you want to pause? The current file will finish first. Keep your device connected until you resume and restoration completes."),
+                self.tr("Are you sure you want to pause? Active transfers will finish first. Keep your device connected until you resume and restoration completes."),
                 self.tr("Pause transfer")):
                 control.request_pause()
         self._update_pause_control()
@@ -152,7 +152,7 @@ class IOSApplyPage(QWidget):
         media = state in {"available", "paused", "pending", "resuming"}
         self.pause_btn.setVisible(self._busy and media)
         self.pause_btn.setEnabled(state in {"available", "paused"})
-        text = {"paused": "Resume photo transfer", "pending": "Pausing after the current file…", "resuming": "Resuming…"}.get(state, "Pause photo transfer")
+        text = {"paused": "Resume photo transfer", "pending": "Pausing after active transfers…", "resuming": "Resuming…"}.get(state, "Pause photo transfer")
         self.pause_btn.setText(self.tr(text))
         self.pause_btn.setToolTip(self.tr("Photo transfer can pause between files. Active data restoration and reboots cannot be paused."))
         if state in {"pending", "paused", "resuming"}:

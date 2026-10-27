@@ -5,7 +5,9 @@ from .posterboard.template_options.templates_tweak import TemplatesTweak
 from .status_bar.status_bar_tweak import StatusBarTweak
 from .icon_themes.icon_themes_tweak import IconThemesTweak
     
-tweaks = {
+from .store import TweakStore, default_changes
+
+tweaks = TweakStore({
     ## PosterBoard
     TweakID.PosterBoard: PosterboardTweak(),
 
@@ -18,4 +20,4 @@ tweaks = {
     ## Icon Themes
     TweakID.IconThemes: IconThemesTweak(),
 
-}
+}, changes=default_changes)

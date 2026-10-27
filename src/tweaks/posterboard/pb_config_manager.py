@@ -3,6 +3,8 @@ import shutil
 import sqlite3
 import json
 import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from PySide6.QtCore import QCoreApplication, QStandardPaths
 from typing import Optional
 
@@ -63,6 +65,7 @@ def create_empty_posterboard_db(dest_path: str) -> str:
 class PBConfigManager:
     def __init__(self):
         self.staging = False
+        self._workspaces = []
         self.saved_items: list[PBConfigItem] = []
         self.staged_items: list[PBConfigItem] = []
         self.database = None
@@ -74,6 +77,14 @@ class PBConfigManager:
         # manifest path (see extract_posterboard_db) and reused when the
         # tweak writes the database back; 61 is the oldest supported layout.
         self.structure_version = 61
+
+    def _workspace(self):
+        from src.restore.storage import posterboard_dir
+        base = Path(posterboard_dir()) / '.work'
+        base.mkdir(parents=True, exist_ok=True)
+        workspace = TemporaryDirectory(prefix='operation-', dir=base)
+        self._workspaces.append(workspace)
+        return Path(workspace.name)
 
     def start_staging(self):
         self.staged_items.clear()
@@ -87,6 +98,14 @@ class PBConfigManager:
     def cleanup(self):
         self.staged_items.clear()
         self.staging = False
+        self.staged_database = None
+        retained = []
+        for workspace in self._workspaces:
+            if self.database and Path(self.database).parent == Path(workspace.name):
+                retained.append(workspace)
+            else:
+                workspace.cleanup()
+        self._workspaces = retained
     def add_config(self, uuid: str, ext: str):
         new_conf = PBConfigItem(uuid, ext, set_selected=True)
         self.staged_items.append(new_conf)
@@ -108,7 +127,7 @@ class PBConfigManager:
     def save_staged_ids(self, udid: str):
         if self.staging:
             PreferenceManager.save_pbconfig_ids(self.staged_items, udid)
-            self.saved_items = self.staged_items
+            self.saved_items = list(self.staged_items)
             self.cleanup()
     
     def update_for_saved_database(self, udid: str) -> bool:
@@ -139,10 +158,7 @@ class PBConfigManager:
             self.structure_version = structure_version
         # make sure it has the tables: "poster", "posterAttributes", "posterRoleMembership", and "sqlite_sequence"
         # copy to a writeable path
-        app_data_path = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-        if not path.exists(app_data_path):
-            makedirs(app_data_path)
-        dbpath = path.join(app_data_path, DB_FILE_NAME)
+        dbpath = str(self._workspace() / DB_FILE_NAME)
 
         # Validate source database before copying
         if _is_encrypted_database(new_db):
@@ -184,22 +200,10 @@ class PBConfigManager:
                 "The backup file may be corrupted. Please create a fresh backup and try again."
             )
 
-        db_connection = sqlite3.connect(dbpath)
-        db_cursor = db_connection.cursor()
-        # check the saved ids
-        final_saved_items: list[PBConfigItem] = []
-        for item in self.saved_items:
-            # TODO: Remove if not in current configuration
-            try:
-                db_cursor.execute("SELECT * FROM poster WHERE UUID = ?", (item.uuid,))
-                sort_keys = db_cursor.fetchall()
-                if sort_keys is None or len(sort_keys) == 0:
-                    final_saved_items.append(item)
-            except Exception:
-                print("Error executing database sequence, ignoring.")
-        self.saved_items = final_saved_items
-        # it is correct format, update database
+        with sqlite3.connect(dbpath) as db_connection:
+            present = {row[0] for row in db_connection.execute("SELECT UUID FROM poster")}
         db_connection.close()
+        self.saved_items = [item for item in self.saved_items if item.uuid not in present]
         self.database = dbpath
         if udid is not None:
             # save the database
@@ -237,7 +241,7 @@ class PBConfigManager:
             )
 
         # copy and open database file
-        self.staged_database = path.join(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation), f'STAGED-{DB_FILE_NAME}')
+        self.staged_database = str(self._workspace() / f'STAGED-{DB_FILE_NAME}')
         shutil.copyfile(self.database, self.staged_database)
 
         # Validate the staged copy

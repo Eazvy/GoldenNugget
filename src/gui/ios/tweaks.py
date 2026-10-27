@@ -28,18 +28,13 @@ def _hidden_feature_names() -> set:
     return current_hidden_feature_names()
 
 
-def _fmt_number(value) -> str:
-    """Render a numeric tweak value compactly (5, 0.5, 1)."""
-    try:
-        return f"{float(value):g}"
-    except (TypeError, ValueError):
-        return str(value)
+from .tweak_rows import _fmt_number
 
 
 def _hidden_sections() -> set:
-    """Registry Sections whose feature is hidden, so we skip rendering them."""
+    """Registry sections hidden by the current device's safety rules."""
     hidden = _hidden_feature_names()
-    return {s for s, feat in _SECTION_FEATURES.items() if feat in hidden}
+    return {section for section, feature in _SECTION_FEATURES.items() if feature in hidden}
 
 
 class IOSSectionContent(QWidget):
@@ -217,200 +212,8 @@ class IOSSectionContent(QWidget):
         def is_compatible(tweak_id: TweakID) -> bool:
             return is_tweak_compatible(tweak_id, device_ver, is_iphone, model)
 
-        def description_label(description):
-            label = QLabel(description)
-            label.setWordWrap(True)
-            label.setTextFormat(Qt.PlainText)
-            label.setProperty("tweakDescription", True)
-            label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-            self._switch_labels.append(label)
-            label.setStyleSheet(
-                f"color: {ColorThemeManager.instance().colors.text_secondary}; font-size: 13px;")
-            return label
-
-        def add_value_description(row, description):
-            if description:
-                row.layout().itemAt(0).layout().insertWidget(1, description_label(description))
-                row.setAccessibleDescription(description)
-
-        # Helper to create a switch row for boolean tweaks
-        def make_switch(tweak_id: TweakID, title: str, description: str = "",
-                        target: QVBoxLayout = None):
-            if tweak_id not in tweaks:
-                return
-            tweak = tweaks[tweak_id]
-            card = IOSCard()
-            if tweak_id == TweakID.ForceSolariumFallback:
-                self.force_solarium_fallback_card = card
-            if not is_compatible(tweak_id):
-                card.hide()
-            row_layout = QHBoxLayout(card)
-            row_layout.setContentsMargins(16, 12, 16, 12)
-            row_layout.setSpacing(12)
-
-            c = ColorThemeManager.instance().colors
-            label = QLabel(title)
-            label.setWordWrap(True)
-            label.setStyleSheet(f"color: {c.text_primary}; font-size: 15px;")
-            self._switch_labels.append(label)
-            text_layout = QVBoxLayout()
-            text_layout.setSpacing(4)
-            text_layout.addWidget(label)
-            if description:
-                text_layout.addWidget(description_label(description))
-            row_layout.addLayout(text_layout, 1)
-            switch = IOSSwitch(tweak.enabled)
-            spec = SPECS_BY_ID.get(tweak_id)
-            if tweak_id == TweakID.DisableSystemAperture:
-                def select_aperture(checked):
-                    if checked:
-                        from src.gui.dialogs.confirmation import ask_confirmation
-                        if not ask_confirmation(
-                                self, self.tr("Test Dynamic Island availability?"),
-                                self.tr("This may change Dynamic Island, the status bar and Live Activities. "
-                                        "Removing the black background is not confirmed. "
-                                        "Test this with Disable Dynamic Island switched off. "
-                                        "Turn off and apply again to undo."),
-                                self.tr("Enable experiment"), destructive=True):
-                            switch.setChecked(False)
-                            return
-                    tweak.set_enabled(checked)
-                switch.toggled.connect(select_aperture)
-            elif spec is not None and spec.experimental:
-                def select_experiment(checked):
-                    if checked and spec.warning:
-                        from src.gui.dialogs.confirmation import ask_confirmation
-                        if not ask_confirmation(
-                                self, title, QCoreApplication.translate("Nugget", spec.warning),
-                                self.tr("Enable experiment"), destructive=True):
-                            switch.setChecked(False)
-                            return
-                    tweak.set_enabled(checked)
-                    if checked and spec.exclusive_with is not None:
-                        peer = tweaks.get(spec.exclusive_with)
-                        if peer is not None:
-                            peer.set_enabled(False)
-                        peer_switch = self._tweak_switches.get(spec.exclusive_with)
-                        if peer_switch is not None:
-                            peer_switch.setChecked(False)
-                switch.toggled.connect(select_experiment)
-            else:
-                switch.toggled.connect(lambda checked: tweak.set_enabled(checked))
-            if spec is not None and spec.unavailable_reason:
-                switch.setEnabled(tweak.enabled)
-                switch.toggled.connect(lambda checked, control=switch: control.setEnabled(checked))
-                switch.setToolTip(spec.unavailable_reason)
-            self._tweak_switches[tweak_id] = switch
-            from src.gui.ios.feature_news import add_new_badge
-            add_new_badge(row_layout, "tweak:" + tweak_id.name, card)
-            row_layout.addWidget(switch)
-            row_layout.addWidget(self._make_favorite_button(tweak_id, title))
-            row_layout.addWidget(self._make_info_button(tweak_id, title))
-
-            if description:
-                label.setToolTip(description)
-                switch.setToolTip(description)
-                card.setToolTip(description)
-
-            (target or layout).addWidget(card)
-            self._search_rows.append((card, tweak_id, title, description, is_compatible(tweak_id)))
-
-        # Helper for text input tweaks
-        def make_text_input(tweak_id: TweakID, title: str, description: str = "",
-                            target: QVBoxLayout = None):
-            if tweak_id not in tweaks:
-                return
-            if not is_compatible(tweak_id):
-                return
-            tweak = tweaks[tweak_id]
-            card = IOSCard()
-            card_layout = QHBoxLayout(card)
-            card_layout.setContentsMargins(14, 8, 14, 8)
-            card_layout.setSpacing(10)
-            row = IOSValueRow(title)
-            add_value_description(row, description)
-            if description:
-                row.setToolTip(description)
-            current = ""
-            if getattr(tweak, 'value', None) is not None:
-                current = str(tweak.value)
-                spec = SPECS_BY_ID.get(tweak_id)
-                empty_label = "No app override" if spec is not None and spec.bundle_identifier else "Empty"
-                row.set_display_value(current if current else QCoreApplication.translate("Nugget", empty_label))
-            row.clicked.connect(lambda: self._show_text_input_dialog(tweak_id, title, current, row))
-            from src.gui.ios.feature_news import add_new_badge
-            add_new_badge(row.layout(), "tweak:" + tweak_id.name, row,
-                          index=row.layout().count() - 1)
-            card_layout.addWidget(row, 1)
-            card_layout.addWidget(self._make_favorite_button(tweak_id, title))
-            card_layout.addWidget(self._make_info_button(tweak_id, title))
-            (target or layout).addWidget(card)
-            self._search_rows.append((card, tweak_id, title, description, True))
-
-        # Helper for number input tweaks
-        def make_number_input(tweak_id: TweakID, title: str, min_val: int = 0, max_val: int = 999,
-                              description: str = "", step: float = 1.0,
-                              target: QVBoxLayout = None):
-            if tweak_id not in tweaks:
-                return
-            if not is_compatible(tweak_id):
-                return
-            tweak = tweaks[tweak_id]
-            card = IOSCard()
-            card_layout = QHBoxLayout(card)
-            card_layout.setContentsMargins(14, 8, 14, 8)
-            card_layout.setSpacing(10)
-            row = IOSValueRow(title)
-            add_value_description(row, description)
-            if description:
-                row.setToolTip(f"{description}\n\n"
-                               + QCoreApplication.translate("Nugget", "Range: {0} – {1}")
-                               .format(_fmt_number(min_val), _fmt_number(max_val)))
-            decimals = decimals_for_step(step)
-            current = 0
-            if getattr(tweak, 'value', None) is not None:
-                current = int(tweak.value) if decimals == 0 else float(tweak.value)
-                row.set_display_value(_fmt_number(current))
-            spec = SPECS_BY_ID.get(tweak_id)
-            if spec is not None and spec.reset_value is not None and current == spec.reset_value:
-                row.set_display_value(self.tr("Remove override"))
-            if spec is not None and spec.unavailable_reason:
-                row.set_display_value(self.tr("Unavailable — needs verification"))
-                row.setAccessibleDescription(spec.unavailable_reason)
-                row.setEnabled(False)
-            else:
-                row.clicked.connect(lambda: self._show_number_input_dialog(
-                    tweak_id, title, current, row, min_val, max_val, step))
-            from src.gui.ios.feature_news import add_new_badge
-            add_new_badge(row.layout(), "tweak:" + tweak_id.name, row,
-                          index=row.layout().count() - 1)
-            card_layout.addWidget(row, 1)
-            card_layout.addWidget(self._make_favorite_button(tweak_id, title))
-            card_layout.addWidget(self._make_info_button(tweak_id, title))
-            (target or layout).addWidget(card)
-            self._search_rows.append((card, tweak_id, title, description, True))
-
-        # Render sections straight from the registry. Titles (and descriptions)
-        # are stored as QT_TRANSLATE_NOOP markers and translated here, at
-        # render time.
-        def tr_title(spec) -> str:
-            from src.gui.ios.feature_news import control_title
-            return control_title(QCoreApplication.translate("Nugget", spec.title))
-
-        def tr_description(spec) -> str:
-            if not spec.description:
-                return ""
-            return QCoreApplication.translate("Nugget", spec.description)
-
-        renderers = {
-            Kind.SWITCH: lambda spec, target: make_switch(
-                spec.id, tr_title(spec), tr_description(spec), target),
-            Kind.TEXT: lambda spec, target: make_text_input(
-                spec.id, tr_title(spec), tr_description(spec), target),
-            Kind.NUMBER: lambda spec, target: make_number_input(
-                spec.id, tr_title(spec), spec.min_value, spec.max_value,
-                tr_description(spec), spec.step, target),
-        }
+        from .tweak_rows import TweakRowFactory
+        rows = TweakRowFactory(self, layout, is_compatible)
 
         sections_to_render = self.sections if self.sections is not None else list(Section)
         hidden_sections = _hidden_sections()
@@ -456,7 +259,7 @@ class IOSSectionContent(QWidget):
             start = len(self._search_rows)
             for spec in specs:
                 before = len(self._search_rows)
-                renderers[spec.kind](spec, body)
+                rows.render(spec, body)
                 for index in range(before, len(self._search_rows)):
                     card, *metadata = self._search_rows[index]
                     body.removeWidget(card)
@@ -617,9 +420,7 @@ class IOSSectionContent(QWidget):
         self.filter_control._retheme()
         for lbl in self._switch_labels:
             secondary = bool(lbl.property("tweakDescription"))
-            color = c.text_secondary if secondary else c.text_primary
-            size = 13 if secondary else 15
-            lbl.setStyleSheet(f"color: {color}; font-size: {size}px;")
+            lbl.setStyleSheet(t("tweak_row_description" if secondary else "tweak_row_label"))
         for line in self._category_lines:
             line.setStyleSheet(f"background-color: {c.border}; border: none;")
         for button in self._info_buttons:

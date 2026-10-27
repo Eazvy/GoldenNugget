@@ -268,6 +268,7 @@ class Repairs(unittest.TestCase):
             with self.subTest(uses_afc=uses_afc), ExitStack() as stack:
                 stack.enter_context(patch.object(protective, '_validate_sqlite_db', return_value=True))
                 stack.enter_context(patch.object(protective, 'make_protective_working_copy', return_value=str(self.root)))
+                stack.enter_context(patch.object(protective, 'discard_protective_working_copy'))
                 stack.enter_context(patch.object(protective, 'clean_backup_for_restore', return_value=(0, 0)))
                 stack.enter_context(patch.object(protective, 'verify_backup_payloads', return_value=[]))
                 gate = stack.enter_context(patch.object(media, 'media_store_verified', return_value=False))

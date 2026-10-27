@@ -6,9 +6,11 @@ def build_apply_plan(manager):
     from src.controllers.apply_preview import capture_preview, load_preview, preview_rows
     from src.controllers.hotload import HotLoad
     from src.controllers.tweak_conflicts import current_conflicts
-    from src.gui.ios.compat import compatibility_reasons
+    from src.tweaks.compatibility import compatibility_reasons, version_override_allowed
     from src.tweaks.registry import SPECS_BY_ID
     from src.tweaks.tweaks import tweaks, TweakID
+    from src.tweaks.store import selection_store
+    tweaks = selection_store(manager, tweaks)
     preview = capture_preview(manager)
     version, model = manager.get_current_device_version(), manager.get_current_device_model()
     context = dict(device_version=version, device_model=model)
@@ -33,7 +35,8 @@ def build_apply_plan(manager):
         if tid.name in hidden or safety.rule_for(tid, **context) is not None:
             continue
         if tweak.enabled:
-            reasons = compatibility_reasons(tid, version, model, allow_untested=True)
+            reasons = compatibility_reasons(tid, version, model, allow_untested=version_override_allowed(
+                version, manager.pref_manager.settings.value("enable_incompatible_tweaks", False, type=bool)))
             if reasons:
                 issues.append(dict(code='incompatible_tweak', tweak=tid.name, reasons=reasons))
             spec = SPECS_BY_ID.get(tid)

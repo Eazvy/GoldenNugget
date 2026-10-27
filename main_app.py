@@ -126,70 +126,13 @@ def main() -> int:
     init_logging()
     log_banner()
 
-    # Preload the device-manager module (pymobiledevice3 and its service deps
-    # are the single most expensive import in the app) on a worker thread so it
-    # races with the GUI setup below instead of blocking startup. If it is still
-    # running or failed, the main-thread import later behaves exactly as it did
-    # before — waiting on the module lock or re-raising the error on the main
-    # thread. Qt objects are only ever created on the main thread.
-    import threading
-    _dm_preload_error: list = []
-    _dm_preload_done = threading.Event()
-
-    def _preload_device_manager():
-        try:
-            # Import ONLY the pure-Python pymobiledevice3 backend here. The
-            # device-manager module also imports PySide6.QtWidgets at the top,
-            # and a Qt import on a non-main thread would leak QThreadStorage
-            # entries that Qt complains about at exit. The main-thread import
-            # later still has to load that Qt surface, but the pmd3 services
-            # (the single most expensive part) are already in sys.modules.
-            from pymobiledevice3 import usbmux, ca  # noqa: F401
-            from pymobiledevice3.lockdown import create_using_usbmux  # noqa: F401
-            from pymobiledevice3.services.mobilebackup2 import Mobilebackup2Service  # noqa: F401
-            from pymobiledevice3.services.mobile_config import MobileConfigService  # noqa: F401
-            from pymobiledevice3.services.diagnostics import DiagnosticsService  # noqa: F401
-            from pymobiledevice3.services.installation_proxy import InstallationProxyService  # noqa: F401
-            import pymobiledevice3.service_connection  # noqa: F401
-            import pymobiledevice3.exceptions  # noqa: F401
-        except BaseException as e:  # surfaced on the main thread below
-            _dm_preload_error.append(e)
-        finally:
-            _dm_preload_done.set()
-
-    threading.Thread(target=_preload_device_manager, name="device-manager-preload", daemon=True).start()
+    from src.gui.bootstrap import preload_backend
+    backend_preload = preload_backend()
 
     app = CrashHandlerApp(sys.argv)
 
-    # Fusion style is required for a custom QPalette to take effect on all
-    # platforms (native styles ignore palette tweaks).  The palette is now
-    # managed by ColorThemeManager so it can switch between dark/light.
-    app.setStyle("Fusion")
-
-    from src.gui.theme import ColorThemeManager, FONT_FAMILY
-    _color_theme = ColorThemeManager.instance()
-    # Pins the colour scheme too, so the OS light/dark setting never leaks in.
-    _color_theme.apply_to_app(app)
-
-    # Register the bundled Inter variable font and make it the single UI font
-    # on every platform. Both the dev tree and the PyInstaller bundle
-    # (_MEIPASS) ship it at src/qt/fonts/...; the platform default size is
-    # kept and weights/italics come from the variable font.
-    from PySide6.QtGui import QFontDatabase
-    _fonts_root = os.path.join(
-        getattr(sys, "_MEIPASS", os.path.dirname(__file__)),
-        "src", "qt", "fonts",
-    )
-    for _font_file in ("InterVariable.ttf", "InterVariable-Italic.ttf"):
-        _font_path = os.path.join(_fonts_root, _font_file)
-        if QFontDatabase.addApplicationFont(_font_path) == -1:
-            print(f"[init] WARNING: bundled font not registered: {_font_path}", flush=True)
-    _app_font = app.font()
-    _app_font.setFamily(FONT_FAMILY)
-    app.setFont(_app_font)
-    print(f"[init] Font: {FONT_FAMILY} on all platforms", flush=True)
-
-    print(f"[init] Qt style: {app.style().objectName()}")
+    from src.gui.bootstrap import configure_appearance
+    configure_appearance(app, os.path.dirname(__file__))
 
     QCoreApplication.setOrganizationDomain("com.leemin")
     QCoreApplication.setApplicationName("GoldenNugget")
@@ -209,20 +152,8 @@ def main() -> int:
     icon_path = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "nugget.ico")
     app.setWindowIcon(QIcon(icon_path))
 
-    # Restore the preset that was loaded right before the app restarted (pages
-    # read the tweak state only once on startup, so the preset must be applied
-    # before the window is created). The marker is cleared once applied.
-    last_loaded_preset = settings.value("last_loaded_preset", "", type=str)
-    if last_loaded_preset:
-        try:
-            from src.controllers.preset_manager import PresetManager
-            if PresetManager().load_preset(last_loaded_preset):
-                logger.info("Restored preset: %s", last_loaded_preset)
-        except Exception as e:
-            logger.error("Failed to restore preset '%s': %s", last_loaded_preset, e)
-        finally:
-            settings.setValue("last_loaded_preset", "")
-            settings.sync()
+    from src.gui.bootstrap import restore_selected_preset
+    restore_selected_preset(settings, logger)
 
     # Import the main window module while the device-manager preload is still
     # running: the GUI import graph no longer pulls in pymobiledevice3, so the
@@ -233,9 +164,7 @@ def main() -> int:
     # (it races with the setup above); waiting here is a no-op in that case.
     # If it failed, the error is re-raised on the main thread exactly as if the
     # import had run here directly.
-    _dm_preload_done.wait()
-    if _dm_preload_error:
-        raise _dm_preload_error[0]
+    backend_preload.wait()
     from src.devicemanagement.device_manager import DeviceManager
     dm = DeviceManager()
 
@@ -305,79 +234,10 @@ def main() -> int:
 
     QTimer.singleShot(0, prepare_control_pages)
 
-    # Check for updates in the background so startup never blocks on the
-    # network (GitHub API latency / offline timeouts). The modal dialog is
-    # exec'd on the main thread via a queued signal once the answer is known.
-    try:
-        import threading
-        from PySide6.QtCore import QObject, Signal
-
-        class _UpdateSignal(QObject):
-            available = Signal(object)
-
-        _update_signal = _UpdateSignal()
-
-        def _check_update():
-            try:
-                from src.controllers import web_request_handler
-                from src.gui.version import App_Version, App_Build
-                result = web_request_handler.is_update_available(App_Version, App_Build)
-                ok = bool(result) if web_request_handler.last_fetched_version is not None else None
-            except Exception as e:
-                logger.debug("Update check failed: %s", e)
-                ok = None
-            _update_signal.available.emit(ok)
-
-        def _update_checked(available):
-            widget.ios_home.set_update_available(available)
-
-        _update_signal.available.connect(_update_checked)
-        threading.Thread(target=_check_update, daemon=True).start()
-        app._update_signal = _update_signal  # keep a strong reference
-    except Exception as e:
-        logger.debug("Background update check skipped: %s", e)
-
-    # HotLoad: refresh the remote safety rules in the background every launch,
-    # and watch for a kill rule to become active while the app is already
-    # running. Local caching means applications still use whatever is on disk
-    # even if this fetch fails, and it never blocks startup.
-    try:
-        import threading
-
-        def _watchdog_kill(quiet=True):
-            """If a kill rule now applies to the current iOS, terminate the
-            running app like a crash (force shutdown, no graceful exit).
-            """
-            kill = _hotload_kill_or_none(dm, hotload)
-            if kill:
-                reason = kill.get("reason")
-                logger.critical("GoldenNugget killed by HotLoad rules while running: %s", reason)
-                print(f"[watchdog] HotLoad: KILLED - {reason}", flush=True)
-                if not quiet:
-                    _show_kill_message(kill)
-                # aborts the GTK/Qt main loop externally — mimics a crash exit.
-                os._exit(1)
-
-        def _refresh_hotload():
-            try:
-                changed = hotload.update()
-                if changed:
-                    _watchdog_kill(quiet=False)
-            except Exception as e:
-                logger.debug("HotLoad update failed: %s", e)
-
-        threading.Thread(target=_refresh_hotload, daemon=True).start()
-
-        # Periodic re-check so a kill published after launch still takes the
-        # app down even if the refresh thread was skipped or failed.
-        from PySide6.QtCore import QTimer
-        _kill_timer = QTimer()
-        _kill_timer.setInterval(5000)
-        _kill_timer.timeout.connect(_watchdog_kill)
-        _kill_timer.start()
-        app._hotload_kill_timer = _kill_timer  # keep a strong reference
-    except Exception as e:
-        logger.debug("HotLoad startup check skipped: %s", e)
+    from src.gui.startup_services import StartupServices
+    app._startup_services = StartupServices(
+        app, widget, dm, hotload, logger, _hotload_kill_or_none, _show_kill_message)
+    app._startup_services.start()
 
     from src.tweaks.tweaks import tweaks, TweakID
     for arg in sys.argv:

@@ -209,9 +209,6 @@ navigating to Settings. The module is deliberately split in two:
 
 Single source of truth for every plist-based tweak: id, section, title,
 plist location, key, default value, UI kind (switch/text/number).
-
-Single source of truth for every plist-based tweak: id, section, title,
-plist location, key, default value, UI kind (switch/text/number).
 - `tweak_loader.load_plist_tweaks()` builds the runtime instances from the
   registry (daemons stay hand-defined there).
 - The iOS tweaks page (`src/gui/ios/tweaks.py`) renders its sections straight
@@ -472,9 +469,12 @@ backup in the persistent app-data store
   copy the tweaks write to already holds the *tweaked* values, so restoring a
   captured "original" re-wrote the very tweaks the user asked to remove. A
   reset therefore discards any non-Nugget customisation in those plists.
+- Plist reset targets for Springboard, Liquid Glass and Internal come from
+  the tweak registry, alongside legacy targets. Liquid Glass is offered in
+  the reset picker. Shared plist files reset together; opaque Siri AI archives
+  use the separate Reset Siri AI Overrides tweak.
 - What each `files_to_null` entry is written as:
-  - **iOS 27+** → `plistlib.dumps({})` (a valid but empty plist).
-  - **iOS 26** → `b""` (zero-byte, the original Nugget behaviour).
+  - **All supported versions (26.2+)** → `plistlib.dumps({})` (a valid but empty plist).
   - **Never** write a zero-byte plist on iOS 26.2+: a truncated
     `com.apple.springboard.plist` crashes SpringBoard at boot and sends the
     device into a boot loop. An empty dict parses and falls back to defaults.
@@ -490,7 +490,7 @@ backup in the persistent app-data store
   `managed_pref_app_plists()` / `managed_pref_target()` in
   `src/tweaks/registry.py` (add a managed-pref target to the registry and
   both rules follow automatically):
-  - the reset writes the mirror too (`{}` on iOS 27+, owner 501) — never a
+  - the reset writes the mirror too (`{}` on all supported versions, owner 501) — never a
     zero-byte app plist, that is the boot-loop input above;
   - the mirrors are excluded from the protective backup
     (`_SKIP_APP_PREF_FILES` in `src/restore/protective.py`), because Phase 3
@@ -650,8 +650,9 @@ backup in the persistent app-data store
 ## Error Handling
 
 ### Device Lock Detection
-- `is_device_locked_error()` — detects "ErrorCode" + "208", "Device locked",
-  or "MBErrorDomain" in the message (defined **once** in
+- `is_device_locked_error()` — detects explicit device-lock messages,
+  lockdown password/passcode-required errors, or code 208 (`ErrorCode` /
+  `MBErrorDomain/208`), never an unrelated `MBErrorDomain` error (defined **once** in
   `src/exceptions/device_errors.py`; imported/aliased locally as
   `_is_device_locked_error` in `device_manager.py`, `protective.py`,
   `pb_dialog.py`)

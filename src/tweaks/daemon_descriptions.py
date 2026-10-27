@@ -38,9 +38,7 @@ DAEMON_DESCRIPTIONS = {'OTA': 'Stops background software-update services and add
  'GameKitService': 'Interrupts game features that depend on this helper.',
  'Sidecar': 'Interrupts companion-display features.',
  'SpeechRecognition': 'Stops features that turn spoken words into text.',
- 'Translate': 'Stops apps translating text or speech.',
  'MockLocation': "Stops development tools simulating the device's location.",
- 'DeviceCheck': "Stops apps checking device or app validity with Apple's service.",
  'WifiAnalytics': 'Stops collecting Wi-Fi usage and connection reports.',
  'AnalyticsHelper': 'Stops the listed system usage-report services.',
  'AudioAnalytics': 'Stops collecting audio troubleshooting reports.',
@@ -55,7 +53,6 @@ DAEMON_DESCRIPTIONS = {'OTA': 'Stops background software-update services and add
  'WirelessDiagnostics': 'Stops wireless troubleshooting tools and reports.',
  'DuetHeuristic': 'Interrupts when background work runs.',
  'DuetExpert': 'Interrupts activity-based suggestions and background task scheduling.',
- 'Decisiond': 'The effect of stopping this service is unknown.',
  'Triald': "Stops Apple's feature trials and related background downloads.",
  'Sociald': 'Interrupts social-account features.',
  'thermalmonitord': 'May cause instability or interfere with temperature-related system behavior.'}

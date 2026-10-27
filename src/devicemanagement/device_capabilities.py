@@ -72,3 +72,13 @@ def has_always_on_display(model: str) -> bool:
         "iPhone17,1", "iPhone17,2", "iPhone18,1", "iPhone18,2", "iPhone18,3", "iPhone18,4",
         "iPhone19,2", "iPhone19,3", "iPhone19,7",
     }
+
+
+def has_apple_intelligence(model: str) -> bool:
+    """iPhone 15 Pro / Pro Max and subsequent iPhone hardware generations."""
+    import re
+    match = re.fullmatch(r"iPhone(\d+),(\d+)", str(model or "").strip())
+    if match is None:
+        return False
+    generation, variant = map(int, match.groups())
+    return (generation == 16 and variant in (1, 2)) or (generation >= 17 and variant > 0)

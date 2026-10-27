@@ -77,6 +77,8 @@ def decode(text: str, validate=None) -> dict:
         raw = inflater.decompress(compressed, MAX_JSON_BYTES)
         if inflater.unconsumed_tail:
             raise ShareCodeError(QT_TRANSLATE_NOOP("ShareCode", "The share code expands to too much data."))
+        if not inflater.eof:
+            raise ShareCodeError(QT_TRANSLATE_NOOP("ShareCode", "The share code is damaged or incomplete."))
         payload = json.loads(raw.decode("utf-8"))
     except ShareCodeError:
         raise

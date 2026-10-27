@@ -50,7 +50,7 @@ def get_resettable_pages(device_manager) -> list[Page]:
     # SpringBoard unlinks brings the stock carrier name back, so the old
     # "no write permissions for Speakeasy flags" exclusion is stale. The
     # parameter is kept for callers (GUI/CLI) that still pass a device manager.
-    pages = [Page.StatusBar, Page.Springboard, Page.InternalOptions, Page.Daemons]
+    pages = [Page.StatusBar, Page.Springboard, Page.LiquidGlass, Page.InternalOptions, Page.Daemons]
     # Templates: only once community tweaks from .batter templates have
     # written something to this iPhone (see community_tweaks.write_record).
     try:

@@ -71,8 +71,10 @@ def sparse_signature(files) -> dict:
             src = getattr(f, "contents_path", None)
             if src:
                 try:
-                    with open(src, "rb") as fh:
-                        data = fh.read()
+                    from src.utils.payload import copy_payload
+                    _, digest = copy_payload(src)
+                    signature[f"{domain}/{path}"] = digest.hex()
+                    continue
                 except OSError:
                     continue
         if data is None:

@@ -48,7 +48,7 @@ SPRINGBOARD_GROUPS = {
         "KeyboardShouldSplitInSplitPreferringContext",
         "UIKeyboardPersistentSplitProgress",
         "UIKeyboardPersistentSplitLock",
-        "SBHideSearchAffordance", "SBDisableLiveIcons", "SBMaxIconListCount",
+        "SBHideSearchAffordance", "SBHomeScreenShowsSearchButton", "SBDisableLiveIcons", "SBMaxIconListCount",
         "SBSuppressAppShortcutTruncation",
     ),
     "Power & Alerts": (

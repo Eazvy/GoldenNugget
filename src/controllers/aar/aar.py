@@ -4,6 +4,9 @@ Licensed under MIT. Please credit if using.
 '''
 
 import struct
+import os
+import shutil
+from src.utils.payload import open_payload
 
 # make a .aar of one contexts.plist file
 def wrap_in_aar(input_file, input_mov, output_file):
@@ -31,14 +34,9 @@ def wrap_in_aar(input_file, input_mov, output_file):
     # Hardcoded settlingEffect.mov header
     header2 = bytearray.fromhex("4141303129005459503146504154501200736574746C696E674566666563742E6D6F7644415441F4B8")
     
-    if isinstance(input_mov, bytes):
-        file_data2 = input_mov
-    else:
-        with open(input_mov, 'rb') as f:
-            file_data2 = f.read()
-    
-    file_size2 = len(file_data2)
-    
+    file_size2 = (len(input_mov) if isinstance(input_mov, bytes)
+                  else os.path.getsize(input_mov))
+
     if file_size2 <= 0xFFFF:
         # Our size can fit in a 2 byte AA_FIELD_TYPE_BLOB, yay
         header2[-2:] = struct.pack('<H', file_size2)
@@ -58,5 +56,9 @@ def wrap_in_aar(input_file, input_mov, output_file):
         f.write(header)
         f.write(file_data)
         f.write(header2)
-        f.write(file_data2)
+        start = f.tell()
+        with open_payload(input_mov) as source:
+            shutil.copyfileobj(source, f, length=1024 * 1024)
+        if f.tell() - start != file_size2:
+            raise OSError("Video size changed while creating the AAR")
 

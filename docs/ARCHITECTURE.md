@@ -132,6 +132,11 @@ Key methods:
   No pre-reset capture: the device's own plists are never pulled, because the
   managed-preferences copy the tweaks write to already holds the tweaked
   values, so restoring a captured "original" would re-apply the tweaks.
+  Plist targets come from the tweak registry for Springboard, Liquid Glass
+  and Internal, with legacy targets retained. Reset clears both managed
+  preferences and their app-domain mirrors with valid empty dictionaries on
+  all supported versions (26.2+). Sections sharing a plist reset together;
+  opaque Siri AI archives use the separate Reset Siri AI Overrides tweak.
 
 #### Apply flow (end-to-end)
 ```
@@ -147,7 +152,7 @@ apply_changes()
       ├─ skip-setup + .GlobalPreferences copy  HomeDomain survival copies
       ├─ backup-encryption password handling   (iOS 27+)
       └─ start_restore(files, prepared_backup_root)
-           └─ restore_files → _restore_ios27   three phases, below
+           └─ restore_files → _restore_ios27   six phases, below
 ```
 
 ---
@@ -239,7 +244,12 @@ broken on iOS 26+).
   surfaces the SQLCipher "disable backup encryption" error.
 - `template_file.py` + `template_options/` — the `.batter`-style template
   format: JSON-defined option widgets (picker/remove/replace/set) that edit
-  caml/xml/plist payloads at apply time.
+  caml/xml/plist payloads at apply time. Each template owns its resources and
+  preview mapping. Pickers initialize their applied selection from validated
+  default indices and preserve edits when their controls are rebuilt; multiple
+  selections carry option labels as item data. Numeric conversion must not
+  mutate the option's stored vectors. Offline regressions:
+  `tools/test_template_options.py`.
 - `community_tweaks.py` — format 3 `.batter` `tweaks`: switchable tweaks that
   write plist keys or files to domain-mapped paths. `TemplatesTweak.community_writes`
   collects them; `DeviceManager._apply_tweak_pass` merges their plist keys into
@@ -347,6 +357,16 @@ Phase 6 (98-100%): reboot_device()  — only if auto_reboot (default on iOS 27),
 `prepared_backup_root` is a `PreparedBackup(root, manifest_password)`; when
 absent (encrypted-without-password / kill switch), Phase 1 falls back to an
 in-place `perform_protective_backup()`.
+
+The AFC media cache skips a file only when the previous pull was verified and
+both its size and device modification time match. Older markers without file
+times trigger a fresh pull on the next cache refresh. Transfers stream through
+bounded buffers, verify sizes (after closing the remote file on writes), and
+reject files that change while being pulled. Local payloads and completion
+markers use unique temporary files followed by an atomic rename. Cancellation
+closes file handles and services and joins the parallel media task; resuming a
+paused media restore opens a fresh lockdown session. Offline coverage lives in
+`tools/test_afc_media_safety.py` and `tools/test_afc_regressions.py`.
 
 Progress ranges are the real `_PHASE_BACKUP_END=40`, `_PHASE_TWEAK_END=60`,
 and the hardcoded `95`/`98`/`100` bounds in `_restore_ios27` — the old
@@ -640,3 +660,84 @@ checked-in copy, with no sibling-checkout or pip-install requirement. PyInstalle
 collects the statically imported modules and ships the upstream license. Include
 `awesomeui/controls.py` when running translation extraction; its original
 translation contexts are preserved.
+
+
+## Performance implementation notes (2026-10-23)
+
+Payload writers use `src/utils/payload.py` for bounded streaming, SHA-1 and
+atomic replacement without modifying hardlinked snapshots. Injection accepts
+path-backed sources; sparse backups and Live Photo/AAR creation stream files.
+Prune inventories once, retains a separate post-injection safety verification,
+and optionally hands its max-inode result to the immediately following injector.
+Recovery working copies stay on the source volume. Snapshot metadata uses
+independent clones when supported, and generation replacement retires the old
+tree for background cleanup while preserving rollback/crash recovery.
+
+AFC uses at most four file/metadata tasks only when the client exposes its
+packet demultiplexer and write lock; legacy clients stay sequential. Disk work
+runs outside the event loop, and cancellation drains active disk operations
+before handles close. Pause/reconnect occurs between completed transfer batches.
+Completeness checks reuse parent-directory metadata only within a fresh pass;
+there is no persistent cached safety verdict. Normal Phase 5 uses the verified
+current media set; manual recovery retains the full historical-store default.
+
+CAML keeps indexed, reusable transition trees and bounded static-layer caches.
+The existing HSL preview approximation operates on raw RGBA without PNG or a
+redundant color-space roundtrip. ZIP-backed tendie assets are lazy with a bounded
+shared byte cache. GUI archive work uses file workers; the icon catalog only
+creates cards near the viewport. Autosave captures immutable data, debounces
+changes, writes atomically in the background and flushes on shutdown.
+
+See `docs/PERFORMANCE_CHANGES.md` for the complete audit mapping, measurements
+and remaining filesystem/device-dependent costs. Run
+`python3 tools/run_tests.py test_performance_regressions` for the new offline
+invariants in addition to the existing AFC/backup/GUI suites.
+
+
+## Restore and state boundaries (October 2026 refactoring)
+
+The public entrypoints remain compatible; their responsibilities now live in
+smaller components. The implementation/status map and measurements are in
+[REFACTORING_CHANGES.md](REFACTORING_CHANGES.md).
+
+- `restore/verification.py`: `VerificationResult` distinguishes verified,
+  unavailable and failed. `protective.verify_backup_payloads` keeps the legacy
+  missing-path list on success and **raises** when verification cannot run.
+  `PruneResult` exposes removal counts and the optional inode hint explicitly.
+- `restore/recovery.py`: common prune/inject/verify preparation for normal apply
+  and GUI/CLI recovery. Normal apply sets `require_media_complete=True` before
+  any prune; manual rescue keeps a separate policy for available media.
+- `restore/context.py` and the phase helpers in `restore/restore.py`: options,
+  current connection ownership, sparse delivery, protective restore and final
+  reboot/media/setup steps. Reconnect replacements are published on exceptions
+  too, so cleanup closes the current client.
+- `restore/backup_store.py`: local working copies, snapshots, regeneration and
+  payload inventory. Metadata remains independently copied; payloads can be
+  hardlinked. `protective.py` re-exports the established public helpers.
+- `restore/device_link_adapter.py`: idempotent compatibility shims for the
+  pinned mobilebackup2 client. `restore/media_store.py` owns the AFC marker and
+  local path verification; `afc_transport.py` owns capability detection/types.
+- `utils/async_disk.py`: initializes the canonical executor on Python 3.15,
+  including standalone recovery imports. Mutating disk calls join their worker before propagating
+  cancellation, including repeated cancellation. Rollback must not race a
+  still-running copy/prune/injection.
+- `controllers/tweak_compiler.py`: explicit compilation dependencies,
+  registered handlers and owned `TweakArtifacts`; encryption/device execution
+  remains in DeviceManager. Temporary payload paths live through restore.
+- `tweaks/store.py`: subscriptions, batch notifications and injected service
+  stores. The GUI retains the default shared store. `PresetManager.snapshot()`
+  returns detached serializable state for background writers.
+- Preset repository, validation and transactional application are separated in
+  `preset_repository.py`, `preset_codec.py`, `preset_apply.py`.
+- `gui/autosave.py` schedules writes and relays worker notifications into Qt;
+  `controllers/autosave_state.py` tracks revisions/errors. `gui/dialogs/file_task.py`
+  limits local work to two worker threads and 64 admitted jobs. Mandatory writes
+  drain on exit; previews support cooperative cancellation.
+- Template metadata/package resources and the Qt editor are separate. Legacy
+  option GUI adapters remain supported. `PatchSession` batches ordered setter
+  edits and flushes before replace/delete/rename operations.
+- Mutable CAML edits use `CADocument.edit()` or `touch()` to invalidate caches.
+  The decoded image LRU has a 64 MiB budget; this is not a total process memory
+  limit and does not cap a currently needed oversized image.
+
+Regression command: `python3 tools/run_tests.py test_refactoring_regressions`.

@@ -10,11 +10,12 @@ from src.qt.custom_elements.multicombobox import MultiComboBox
 
 class PickerElement:
     label: str # label to show for the picker
-    files: list[str] = [] # list of files to include with the picker
+    files: list[str] # list of files to include with the picker
     associated_preview: Optional[str] = None
     preview_lbl: Optional[QLabel] = None
 
     def __init__(self, option_data: dict):
+        self.files = []
         self.label = option_data['label']
         if 'files' in option_data:
             self.files = option_data['files']
@@ -28,15 +29,16 @@ class PickerOption(TemplateOption):
     options: list[PickerElement] # list of elements inside the picker
     allow_multiple_selection: bool = False # allow choosing multiple options
     rename: bool = False # whether or not to rename the chosen files (allow_multiple_selection must be False)
-    names: list[str] = [] # list of names to rename to
+    names: list[str] # list of names to rename to
 
-    selection: list[str] = [] # chosen user selection (int or list of strings)
-    default_val: list[int] = [] # the default values (int or list of ints)
+    selection: int | list[str] # chosen user selection
+    default_val: int | list[int] # default index or indices
 
     def __init__(self, data: dict):
         super().__init__(data=data)
         # get the list of options
         self.options = []
+        self.names = []
         opts = data['options']
         for opt in opts:
             self.options.append(PickerElement(opt))
@@ -58,15 +60,20 @@ class PickerOption(TemplateOption):
                     if any(len(opt.files) > len(self.names) for opt in self.options):
                         raise ValueError('Picker rename needs a name for each option’s files')
         # default value(s)
-        if 'default_value' in data:
-            self.default_val = data['default_value']
-        elif 'default_values' in data:
-            self.default_val = data['default_values']
+        self.default_val = data.get('default_value', data.get(
+            'default_values', [] if self.allow_multiple_selection else 0))
+        indices = self.default_val if self.allow_multiple_selection else [self.default_val]
+        if not isinstance(indices, list) or any(
+                type(index) is not int or not 0 <= index < len(self.options)
+                for index in indices):
+            raise ValueError('Picker defaults must reference existing options')
+        self.selection = ([self.options[index].label for index in indices]
+                          if self.allow_multiple_selection else self.default_val)
 
     def create_interface(self, options_widget: QWidget, options_layout: QVBoxLayout):
         # picker option
         picker_widget = QWidget(options_widget)
-        picker_layout = QHBoxLayout(options_widget)
+        picker_layout = QHBoxLayout(picker_widget)
         # add label first
         picker_label = QLabel(picker_widget)
         picker_label.setText(self.label)
@@ -74,16 +81,18 @@ class PickerOption(TemplateOption):
         if self.allow_multiple_selection:
             pickerDrp = MultiComboBox(picker_widget, updateAction=self.onPickerUpdate)
             for opt in self.options:
-                pickerDrp.addItem(opt.label)
-            pickerDrp.selectIndices(self.default_val)
+                pickerDrp.addItem(opt.label, opt.label)
+            selected = list(self.selection)
+            pickerDrp.selectIndices([i for i, opt in enumerate(self.options)
+                                     if opt.label in selected])
             pickerDrp.updateText()
             pickerDrp.setStyleSheet("QWidget { background-color: #3b3b3b; border: 2px solid #3b3b3b; border-radius: 5px; }")
         else:
             pickerDrp = QComboBox(picker_widget)
             for opt in self.options:
                 pickerDrp.addItem(opt.label)
-            pickerDrp.activated.connect(self.onPickerUpdate)
-            pickerDrp.setCurrentIndex(self.default_val)
+            pickerDrp.setCurrentIndex(self.selection)
+            pickerDrp.currentIndexChanged.connect(self.onPickerUpdate)
         picker_layout.addWidget(pickerDrp)
         picker_widget.setLayout(picker_layout)
         options_layout.addWidget(picker_widget)

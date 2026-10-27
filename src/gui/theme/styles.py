@@ -15,6 +15,28 @@ FONT_FAMILY = "Inter Variable"
 
 
 STYLES = {
+    "tweak_row_description": "color: {text_secondary}; font-size: 13px; background-color: transparent;",
+    "tweak_row_label": "color: {text_primary}; font-size: 15px; background-color: transparent;",
+    "onboarding_dialog": """
+        QDialog {{ background-color: {bg_primary}; }}
+        QLabel {{ color: {text_primary}; background-color: transparent; border: none; }}
+    """,
+    "onboarding_title": "font-size: 24px; font-weight: 700; color: {text_primary}; background-color: transparent;",
+    "onboarding_description": "font-size: 13px; color: {text_secondary}; background-color: transparent; border: none;",
+    "onboarding_option_title": "font-size: 18px; font-weight: 600; color: {text_primary}; background-color: transparent; border: none;",
+    "onboarding_preview": "background-color: transparent; border: none;",
+    "onboarding_badge": "color: {accent}; background-color: transparent; border: none; font-size: 11px; font-weight: 700;",
+    "onboarding_choice": """
+        QPushButton#interfaceChoice {{ background-color: {bg_secondary}; border: 2px solid {border}; border-radius: 16px; text-align: left; }}
+        QPushButton#interfaceChoice:hover {{ background-color: {surface_hover}; }}
+        QPushButton#interfaceChoice:checked {{ border-color: {accent}; }}
+        QPushButton#interfaceChoice:focus {{ border-color: {accent}; }}
+    """,
+    "onboarding_continue": """
+        QPushButton {{ background-color: {accent}; color: {text_inverse}; border: none; border-radius: 10px; padding: 12px 22px; font-size: 14px; font-weight: 600; }}
+        QPushButton:hover {{ background-color: {accent_hover}; }}
+        QPushButton:focus {{ border: 2px solid {text_primary}; padding: 10px 20px; }}
+    """,
     "accent_swatch": """
         QPushButton {{ background-color: {swatch}; border-radius: 16px;
                        border: 3px solid transparent; }}

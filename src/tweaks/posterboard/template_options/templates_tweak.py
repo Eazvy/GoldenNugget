@@ -1,8 +1,6 @@
 import os
-import traceback
 import uuid
 
-from PySide6 import QtWidgets
 from PySide6.QtCore import QCoreApplication
 
 from ...tweak_classes import Tweak
@@ -29,16 +27,9 @@ class TemplatesTweak(Tweak):
         return len(self.templates) == 0
 
     def add_template(self, file: str, version: str = None):
-        try:
-            new_template = TemplateFile(path=file, device_version=version)
-            self.templates.append(new_template)
-        except Exception as e:
-            print(traceback.format_exc())
-            detailsBox = QtWidgets.QMessageBox()
-            detailsBox.setIcon(QtWidgets.QMessageBox.Critical)
-            detailsBox.setWindowTitle(QCoreApplication.tr("Error"))
-            detailsBox.setText(QCoreApplication.tr("Failed to load template") + f" {file}\n\n{str(e)}")
-            detailsBox.exec()
+        new_template = TemplateFile(path=file, device_version=version)
+        self.templates.append(new_template)
+        return new_template
 
     def community_writes(self, version: str = None) -> tuple:
         """(plists, files) from the community tweaks of every template.
@@ -91,8 +82,10 @@ class TemplatesTweak(Tweak):
                     try:
                         # update plist ids if needed
                         contents_path = os.path.join(curr_path, folder)
-                        with open(contents_path, "rb") as in_file:
-                            contents = in_file.read()
+                        # Keep the extracted package alive through apply_tweak's
+                        # output_dir; restore reads this payload in bounded chunks.
+                        with open(contents_path, "rb"):
+                            pass
                         # handle for sparserestore
                         full_path = f"{restore_path}/{folder}"
                         restore_domain = domain
@@ -101,12 +94,12 @@ class TemplatesTweak(Tweak):
                             restore_domain = None
                         full_path = self.parse_path_string(full_path, old_bundle, domain)
                         files_to_restore.append(FileToRestore(
-                            contents=contents,
+                            contents=None, contents_path=contents_path,
                             restore_path=full_path,
                             domain=restore_domain
                         ))
-                    except IOError:
-                        print(f"Failed to open file: {folder}") # TODO: Add QDebug equivalent
+                    except OSError as exc:
+                        raise OSError(f"Could not read template payload: {contents_path}") from exc
                 else:
                     self.recursive_add(old_bundle, domain, files_to_restore, os.path.join(curr_path, folder), f"{restore_path}/{folder}", isAdding)
             else:

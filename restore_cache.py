@@ -54,7 +54,7 @@ from pymobiledevice3.exceptions import (  # noqa: E402
 )
 
 from src.restore.protective import (  # noqa: E402
-    make_protective_working_copy,
+    make_protective_working_copy, discard_protective_working_copy,
     clean_backup_for_restore,
     verify_backup_payloads,
     find_latest_protective_backup,
@@ -327,18 +327,16 @@ async def run(args) -> int:
     # fail the restore with MBErrorDomain/205. When an AFC media store exists,
     # the DCIM/PhotoStreamsData rows are also pruned here — their payloads were
     # never uploaded to the backup and get pushed back over AFC instead.
-    removed_rows, removed_files = await asyncio.to_thread(
-        clean_backup_for_restore, working_root, udid,
-        manifest_password=args.password or "",
-        exclude_afc_media_trees=media_store_verified(media_dir))
-    print(f"Pruned: -{removed_rows} manifest rows, -{removed_files} payload files")
-
-    missing = await asyncio.to_thread(
-        verify_backup_payloads, working_root, udid, args.password or "")
-    if missing:
-        log_error(f"{len(missing)} manifest rows lack payloads "
-                  f"(e.g. {missing[:5]}) - refusing an incomplete restore")
+    from src.restore.recovery import RecoverySource, RecoveryBackend, prepare_recovery
+    from src.exceptions.nugget_exception import NuggetException
+    try:
+        prepared = await prepare_recovery(
+            RecoverySource(working_root, udid, args.password or "", media_dir=media_dir),
+            RecoveryBackend(clean_backup_for_restore, verify_backup_payloads, media_store_verified))
+    except NuggetException as exc:
+        log_error(str(exc))
         return 1
+    print(f"Pruned: -{prepared.removed_rows} manifest rows, -{prepared.removed_files} payload files")
 
     def progress_cb(value):
         if isinstance(value, str):
@@ -386,6 +384,7 @@ async def run(args) -> int:
             except Exception as e:  # noqa: BLE001
                 print(f"WARNING: reboot failed, please reboot manually: {type(e).__name__}: {e}")
         print("Your device should now be back at the lock screen with your data.")
+        discard_protective_working_copy(working_root)
         return 0
     except DeviceNotFoundError as e:
         print(f"\nERROR: device not reachable: {e}")

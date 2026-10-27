@@ -1,11 +1,14 @@
+from collections.abc import Mapping
 # PEP 810: defer operation-only dependencies on Python 3.15+; eager on older Python.
 __lazy_modules__ = (
     "src.tweaks.status_bar.status_bar_c.status_setter",
 )
 
 import base64
+import copy
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -29,8 +32,21 @@ from src.controllers.hotload import HotLoad
 PRESETS_DIR_NAME = "Presets"
 PRESET_VERSION = 2
 
+def _selection_store(manager):
+    from src.tweaks.store import selection_store
+    return selection_store(manager, tweaks)
+
+
 class PresetManager:
-    def __init__(self):
+    @property
+    def tweak_store(self):
+        selected = getattr(self, "_selected_store", None)
+        return selected if selected is not None else tweaks
+
+    def __init__(self, tweak_store=None):
+        if tweak_store is not None and not isinstance(tweak_store, Mapping):
+            raise TypeError("tweak_store must be a mapping")
+        self._selected_store = tweak_store
         self.last_transfer_error = ""
         base_dir = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
         # Ensure GoldenNugget-specific folder
@@ -40,33 +56,16 @@ class PresetManager:
         os.makedirs(self.presets_dir, exist_ok=True)
 
     def get_preset_path(self, name: str) -> str:
-        safe_name = self._sanitize_name(name)
-        return os.path.join(self.presets_dir, f"{safe_name}.json")
+        return self.repository.get_preset_path(name)
 
     def _sanitize_name(self, name: str) -> str:
-        safe = "".join(c for c in name if c.isalnum() or c in " _-").strip()
-        return safe or "Preset"
+        return self.repository._sanitize_name(name)
 
     def list_presets(self) -> list[str]:
-        presets = []
-        if not os.path.isdir(self.presets_dir):
-            return presets
-        for file in sorted(os.listdir(self.presets_dir)):
-            if file.lower().endswith(".json"):
-                presets.append(os.path.splitext(file)[0])
-        return presets
+        return self.repository.list_presets()
 
     def get_preset_metadata(self, name: str) -> Optional[dict]:
-        """Get metadata for a preset without loading the full data."""
-        file_path = self.get_preset_path(name)
-        if not os.path.isfile(file_path):
-            return None
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data.get("metadata", {})
-        except Exception:
-            return None
+        return self.repository.get_preset_metadata(name)
 
     def preset_has_daemon_changes(self, name: str) -> bool:
         """True if the preset enables the daemon modifications or turns on any
@@ -134,37 +133,34 @@ class PresetManager:
                 })
         return sorted(result, key=lambda x: x.get("updated_at", 0), reverse=True)
 
+    @property
+    def repository(self):
+        from .preset_repository import PresetRepository
+        repository = getattr(self, '_repository', None)
+        if repository is None or repository.presets_dir != os.fspath(self.presets_dir):
+            repository = self._repository = PresetRepository(self.presets_dir)
+        return repository
+
+    def snapshot(self):
+        """A detached serializable state suitable for a background writer."""
+        return copy.deepcopy(self._serialize())
+
+    def save_snapshot(self, name, snapshot, description="", tags=None,
+                      device_model="", ios_version="", *, should_commit=None):
+        return self.repository.save_snapshot(name, snapshot, description, tags,
+                                              device_model, ios_version, should_commit=should_commit)
+
     def save_preset(self, name: str, description: str = "", tags: list = None,
-                    device_model: str = "", ios_version: str = "") -> bool:
-        data = self._serialize()
-        if data is None:
-            return False
-        
-        # Add metadata
-        now = int(time.time())
-        meta = {
-            "version": PRESET_VERSION,
-            "description": description or "",
-            "device_model": device_model or "Unknown",
-            "ios_version": ios_version or "Unknown",
-            "created_at": now,
-            "updated_at": now,
-            "tags": tags or [],
-        }
-        # Preserve original creation time if updating
-        existing_meta = self.get_preset_metadata(name)
-        if existing_meta and "created_at" in existing_meta:
-            meta["created_at"] = existing_meta["created_at"]
-        
-        data["metadata"] = meta
-        
-        file_path = self.get_preset_path(name)
+                    device_model: str = "", ios_version: str = "", *, _data=None, _should_commit=None) -> bool:
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            return True
-        except Exception as e:
-            print(f"Failed to save preset: {e}")
+            snapshot = self.snapshot() if _data is None else _data
+            if snapshot is None:
+                return False
+            return self.save_snapshot(name, snapshot, description, tags, device_model, ios_version,
+                                      should_commit=_should_commit)
+        except Exception:
+            import logging
+            logging.getLogger('GoldenNugget.presets').exception('Could not save preset %s', name)
             return False
 
     def load_preset(self, name: str, preview_only: bool = False) -> bool:
@@ -182,14 +178,7 @@ class PresetManager:
         return self._apply(data, preview_only=preview_only)
 
     def delete_preset(self, name: str) -> bool:
-        file_path = self.get_preset_path(name)
-        try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                return True
-        except Exception as e:
-            print(f"Failed to delete preset: {e}")
-        return False
+        return self.repository.delete_preset(name)
 
     ## EXPORT / IMPORT
     def export_preset(self, name: str, export_path: str,
@@ -221,7 +210,7 @@ class PresetManager:
                 return True
 
             with open(export_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                json.dump({"metadata": data.get("metadata", {}), **data}, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
             self.last_transfer_error = str(e)
@@ -307,7 +296,7 @@ class PresetManager:
             with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=self.presets_dir,
                                              delete=False) as f:
                 temporary = f.name
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                json.dump({"metadata": data.get("metadata", {}), **data}, f, ensure_ascii=False, indent=2)
             os.replace(temporary, self.get_preset_path(name))
             temporary = None
         finally:
@@ -355,58 +344,12 @@ class PresetManager:
 
     @staticmethod
     def _valid_import_structure(data) -> bool:
-        """Reject malformed containers before they can enter the preset list.
-
-        Old files without metadata and unknown tweak names remain supported.
-        Import stores selections only; it never enables tweaks or applies them.
-        """
-        if not isinstance(data, dict) or not isinstance(data.get("tweaks"), dict):
-            return False
-        meta = data.get("metadata", {})
-        if not isinstance(meta, dict):
-            return False
-        for key in ("description", "device_model", "ios_version"):
-            if key in meta and not isinstance(meta[key], str):
-                return False
-        if "tags" in meta and (not isinstance(meta["tags"], list)
-                               or not all(isinstance(tag, str) for tag in meta["tags"])):
-            return False
-        for key in ("created_at", "updated_at", "version"):
-            if key in meta and type(meta[key]) not in (int, float):
-                return False
-        for name, entry in data["tweaks"].items():
-            if not isinstance(entry, dict):
-                return False
-            if "enabled" in entry and not isinstance(entry["enabled"], bool):
-                return False
-            if (name == "Daemons" or entry.get("type") == "AdvancedPlistTweak") and "value" in entry:
-                if not isinstance(entry["value"], dict):
-                    return False
-            if "templates" in entry and (not isinstance(entry["templates"], list)
-                                          or not all(isinstance(path, str) for path in entry["templates"])):
-                return False
-            if "tweak_states" in entry and (not isinstance(entry["tweak_states"], list)
-                                            or not all(isinstance(state, dict) for state in entry["tweak_states"])):
-                return False
-            if "themes" in entry:
-                if not isinstance(entry["themes"], list):
-                    return False
-                for theme in entry["themes"]:
-                    if not isinstance(theme, dict) or not all(
-                            isinstance(theme.get(key, ""), str)
-                            for key in ("bundle_id", "display_name", "icon_path")):
-                        return False
-            if "override_data" in entry:
-                if not isinstance(entry["override_data"], str):
-                    return False
-                try:
-                    base64.b64decode(entry["override_data"], validate=True)
-                except ValueError:
-                    return False
-        return True
+        from .preset_codec import valid_import_structure
+        return valid_import_structure(data)
 
     ## SERIALIZATION
     def _serialize(self) -> dict:
+        tweaks = _selection_store(self)
         tweak_data = {}
         for key, tweak in tweaks.items():
             # PosterBoard is excluded from presets: wallpapers are
@@ -416,7 +359,7 @@ class PresetManager:
             try:
                 tweak_data[key.name] = self._serialize_tweak(tweak)
             except Exception as e:
-                print(f"Failed to serialize tweak {key}: {e}")
+                raise ValueError(f"Could not serialize tweak {key.name}: {e}") from e
 
         return {
             "tweaks": tweak_data
@@ -451,47 +394,39 @@ class PresetManager:
 
     ## DESERIALIZATION
     def _apply(self, data: dict, preview_only: bool = False) -> bool:
+        tweaks = _selection_store(self)
+        from src.controllers.preset_apply import apply_preset_transaction, PresetApplyResult
+        from src.tweaks.hidden import current_hidden_tweak_names
         try:
-            # make sure every tweak exists before applying
             self._load_all_tweaks()
-
-            # never re-enable HotLoad-hidden features: loading a preset must not
-            # resurrect broken/dangerous tweaks (defense-in-depth on top of the
-            # warning shown before loading)
-            from src.tweaks.hidden import current_hidden_tweak_names
             hidden_names = current_hidden_tweak_names()
-
-            if "tweaks" in data:
-                for name, tweak_data in data["tweaks"].items():
-                    key = None
-                    try:
-                        key = TweakID[name]
-                    except KeyError:
-                        continue
-                    if key not in tweaks:
-                        continue
-                    # PosterBoard is excluded from presets (see _serialize); skip
-                    # it on load too so old presets cannot restore wallpapers.
-                    if key == TweakID.PosterBoard:
-                        continue
-                    if name in hidden_names:
-                        continue
-                    try:
-                        if preview_only and key == TweakID.Templates:
-                            from types import SimpleNamespace
-                            tweaks[key].templates = [SimpleNamespace(path=path)
-                                                    for path in tweak_data.get('templates', [])]
-                        elif preview_only and key == TweakID.IconThemes:
-                            tweaks[key].themes = [IconTheme(**entry) for entry in tweak_data.get('themes', [])]
-                        else:
-                            self._apply_tweak(tweaks[key], tweak_data)
-                    except Exception as e:
-                        print(f"Failed to apply tweak {name}: {e}")
-
-            return True
-        except Exception as e:
-            print(f"Failed to apply preset: {e}")
-            return False
+            def prepare(name, tweak_data):
+                try:
+                    key = TweakID[name]
+                except KeyError:
+                    return None
+                if key not in tweaks or key == TweakID.PosterBoard or name in hidden_names:
+                    return None
+                candidate = copy.copy(tweaks[key])
+                if isinstance(candidate, StatusBarTweak):
+                    candidate.setter = copy.copy(candidate.setter)
+                if preview_only and key == TweakID.Templates:
+                    from types import SimpleNamespace
+                    candidate.templates = [SimpleNamespace(path=path)
+                                           for path in tweak_data.get('templates', [])]
+                elif preview_only and key == TweakID.IconThemes:
+                    candidate.themes = [IconTheme(**entry) for entry in tweak_data.get('themes', [])]
+                else:
+                    self._apply_tweak(candidate, tweak_data)
+                return key, candidate
+            self.last_apply_result = apply_preset_transaction(data.get('tweaks', {}), tweaks, prepare)
+        except Exception as exc:
+            self.last_apply_result = PresetApplyResult(errors=(str(exc),))
+        if not self.last_apply_result.success:
+            import logging
+            logging.getLogger('GoldenNugget.presets').error(
+                'Preset was not applied: %s', '; '.join(self.last_apply_result.errors))
+        return self.last_apply_result.success
 
     def _load_all_tweaks(self):
         # idempotent: the loaders return early if the tweaks already exist
@@ -521,25 +456,22 @@ class PresetManager:
         if "templates" in data:
             tweak.templates = []
             for path in data["templates"]:
-                if os.path.isfile(path):
-                    try:
-                        tweak.add_template(path)
-                    except Exception as e:
-                        print(f"Failed to add template: {e}")
+                if not os.path.isfile(path):
+                    raise FileNotFoundError(f"Template not found: {path}")
+                tweak.add_template(path)
             tweak.restore_tweak_states(data.get("tweak_states"), data["templates"])
 
     def _apply_status_bar(self, tweak: StatusBarTweak, data: dict):
         tweak.enabled = data.get("enabled", False)
         tweak.setter.silly_mode = data.get("silly_mode", False)
         if "override_data" in data:
-            try:
-                raw = base64.b64decode(data["override_data"])
-                new_overrides = status_ffi.new("StatusBarOverrideData *")
-                struct_size = status_ffi.sizeof(new_overrides[0])
-                status_ffi.memmove(new_overrides, raw, min(len(raw), struct_size))
-                tweak.setter.apply_changes(new_overrides)
-            except Exception as e:
-                print(f"Failed to restore status bar: {e}")
+            raw = base64.b64decode(data["override_data"], validate=True)
+            new_overrides = status_ffi.new("StatusBarOverrideData *")
+            struct_size = status_ffi.sizeof(new_overrides[0])
+            if len(raw) != struct_size:
+                raise ValueError("Invalid status bar override data size")
+            status_ffi.memmove(new_overrides, raw, struct_size)
+            tweak.setter.apply_changes(new_overrides)
 
     def _apply_icon_themes(self, tweak: IconThemesTweak, data: dict):
         tweak.themes = []
@@ -553,6 +485,9 @@ class PresetManager:
                 theme = IconTheme(bundle_id=entry["bundle_id"],
                                   display_name=entry.get("display_name", ""),
                                   icon_path=path)
-                if tweak.store_icon(theme):
-                    tweak.add_theme(theme)
+                if not tweak.store_icon(theme):
+                    raise OSError(f"Could not store icon: {path}")
+                tweak.add_theme(theme)
+            else:
+                raise FileNotFoundError(f"Icon not found: {path}")
 

@@ -334,3 +334,6 @@ class TweakID(Enum):
     # Custom eligibility archive operations (keep existing numeric IDs stable).
     SiriAI = auto()
     ResetSiriAIOverrides = auto()
+
+    LimitDisplayRefreshRate = auto()
+    SBHomeScreenShowsSearchButton = auto()

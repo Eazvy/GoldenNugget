@@ -113,9 +113,7 @@ class Daemon(Enum):
     GameKitService = ["com.apple.gamekitservice"]
     Sidecar = ["com.apple.sidecarcore"]
     SpeechRecognition = ["com.apple.speechrecognition"]
-    Translate = ["com.apple.translated"]
     MockLocation = ["com.apple.mocksynclocationd"]
-    DeviceCheck = ["com.apple.devicecheckd"]
     # --- Safe analytics/telemetry additions (from MiniVoidyy/GoldenNugget-) ---
     # Telemetry/analytics daemons ONLY. Nothing boot-critical, no core
     # wireless/cellular/auth services. These mirror the fork's curated
@@ -141,7 +139,6 @@ class Daemon(Enum):
         "com.apple.DuetHeuristic-BM.Baseband"
     ]
     DuetExpert = ["com.apple.duetexpertd"]
-    Decisiond = ["com.apple.decisiond"]
     Triald = ["com.apple.triald"]
     Sociald = ["com.apple.sociald"]
 
@@ -158,7 +155,7 @@ NOTIFICATION_RECOVERY_DAEMONS = (
     Daemon.CallAnalytics, Daemon.CoreDuet, Daemon.Insight, Daemon.Metrics,
     Daemon.MediaExperience, Daemon.Symptomsd, Daemon.StatisticalDiagnostic,
     Daemon.WirelessDiagnostics, Daemon.DuetHeuristic, Daemon.DuetExpert,
-    Daemon.Decisiond, Daemon.Triald, Daemon.Sociald,
+    Daemon.Triald, Daemon.Sociald,
 )
 
 # Keep shared system services out of the one-tap analytics shortcut. Their
@@ -187,14 +184,14 @@ INTERFACE_DAEMONS: frozenset["Daemon"] = frozenset({
     Daemon.WebBookmarks, Daemon.AppleWatchNano,
     Daemon.WifiLogging, Daemon.Maps, Daemon.SafariSuggestions,
     Daemon.Reminders, Daemon.AirPlay, Daemon.GameKitService,
-    Daemon.Sidecar, Daemon.SpeechRecognition, Daemon.Translate,
-    Daemon.MockLocation, Daemon.DeviceCheck,
+    Daemon.Sidecar, Daemon.SpeechRecognition,
+    Daemon.MockLocation,
     # analytics / telemetry section
     Daemon.CrashReports, Daemon.WifiAnalytics, Daemon.AnalyticsHelper, Daemon.CallAnalytics,
     Daemon.AudioAnalytics, Daemon.EcosystemAnalytics,
     Daemon.CoreDuet, Daemon.Insight, Daemon.Metrics, Daemon.MediaExperience,
     Daemon.Symptomsd, Daemon.StatisticalDiagnostic, Daemon.WirelessDiagnostics,
-    Daemon.DuetHeuristic, Daemon.DuetExpert, Daemon.Decisiond, Daemon.Triald,
+    Daemon.DuetHeuristic, Daemon.DuetExpert, Daemon.Triald,
     Daemon.Sociald,
 } | set(RECOMMENDED_ANALYTICS) | set(NOTIFICATION_RECOVERY_DAEMONS))
 

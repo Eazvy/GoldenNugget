@@ -307,9 +307,7 @@ class IOSDaemonsContent(QWidget):
             (QCoreApplication.translate("Nugget", 'Disable Game Services Helper'), Daemon.GameKitService),
             (QCoreApplication.translate("Nugget", 'Disable Companion Display Helper'), Daemon.Sidecar),
             (QCoreApplication.translate("Nugget", 'Disable Speech-to-Text Helper'), Daemon.SpeechRecognition),
-            (QCoreApplication.translate("Nugget", 'Disable Translation Helper'), Daemon.Translate),
             (QCoreApplication.translate("Nugget", 'Disable Test Locations'), Daemon.MockLocation),
-            (QCoreApplication.translate("Nugget", 'Disable App Device Verification'), Daemon.DeviceCheck),
             (QCoreApplication.translate("Nugget", 'Disable Feedback Background Tasks'), Daemon.Feedback),
             (QCoreApplication.translate("Nugget", 'Disable Settings Usage Reports'), Daemon.SettingsStats),
             (QCoreApplication.translate("Nugget", 'Disable Music Recognition'), Daemon.Shazam),
@@ -373,7 +371,6 @@ class IOSDaemonsContent(QWidget):
             (QCoreApplication.translate("Nugget", 'Disable Wireless Troubleshooting'), Daemon.WirelessDiagnostics),
             (QCoreApplication.translate("Nugget", 'Disable Background Scheduling Helper'), Daemon.DuetHeuristic),
             (QCoreApplication.translate("Nugget", 'Disable Activity Prediction Helper'), Daemon.DuetExpert),
-            (QCoreApplication.translate("Nugget", 'Disable Decision Helper'), Daemon.Decisiond),
             (QCoreApplication.translate("Nugget", 'Disable Apple Feature Trials'), Daemon.Triald),
             (QCoreApplication.translate("Nugget", 'Disable Social Account Helper'), Daemon.Sociald),
         ]:

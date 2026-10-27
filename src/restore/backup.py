@@ -14,6 +14,7 @@ from src.utils.file_to_restore import _FileMode
 from src.restore import mbdb
 from random import randbytes
 from typing import Optional
+from src.utils.payload import copy_payload
 
 # Default nugget file right
 # RWX:RX:RX 
@@ -51,11 +52,15 @@ class ConcreteFile(BackupFile):
         self.size = len(contents)
         return contents
 
+    def write_contents(self, output=None):
+        self.size, self.hash = copy_payload(
+            self.contents if self.contents is not None else self.src_path, output)
+
     def to_record(self) -> mbdb.MbdbRecord:
         if self.inode is None:
             self.inode = int.from_bytes(randbytes(8), "big")
         if self.hash == None or self.size == None:
-            self.read_contents()
+            self.write_contents()
         return mbdb.MbdbRecord(
             domain=self.domain,
             filename=self.path,
@@ -125,7 +130,7 @@ class Backup:
             for file in self.files:
                 if isinstance(file, ConcreteFile):
                     with open(directory / sha1((file.domain + "-" + file.path).encode()).digest().hex(), "wb") as f:
-                        f.write(file.read_contents())
+                        file.write_contents(f)
             with open(directory / "Manifest.mbdb", "wb") as f:
                 f.write(self.generate_manifest_db().to_bytes())
         else:
@@ -136,7 +141,7 @@ class Backup:
                     payload = directory / file_id[:2] / file_id
                     payload.parent.mkdir(parents=True, exist_ok=True)
                     with open(payload, "wb") as f:
-                        f.write(file.read_contents())
+                        file.write_contents(f)
 
             self._write_manifest_db(directory)
 

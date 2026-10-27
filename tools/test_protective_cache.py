@@ -5,6 +5,7 @@ Exercises: cache validity, hardlink working copies, prune interplay,
 PosterBoard DB extraction. Run: python tools/test_protective_cache.py
 """
 import os
+import plistlib
 import sqlite3
 import sys
 import tempfile
@@ -77,7 +78,7 @@ def main():
          pb_payload),
         ("HomeDomain", "Library/SMS/sms.db", None),  # drained mid-stream: row without payload
     ])
-    for name, content in (("Status.plist", b"s"), ("Manifest.plist", b"m"), ("Info.plist", b"i")):
+    for name, content in (("Status.plist", b"s"), ("Manifest.plist", plistlib.dumps({"IsEncrypted": False})), ("Info.plist", b"i")):
         (cache.device_dir / name).write_bytes(content)
 
     check("no master before first refresh marker", not cache.has_valid_master())

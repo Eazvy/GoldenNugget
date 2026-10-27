@@ -1,26 +1,28 @@
-from typing import Optional, Callable
+from typing import Any, Optional, Callable
+from .store import default_changes
 
 from .basic_plist_locations import FileLocation
 
-_on_tweak_change: Optional[Callable[[], None]] = None
+_legacy_unsubscribe = None
+
+def subscribe_tweak_changes(callback):
+    return default_changes.subscribe(callback)
 
 def set_tweak_change_callback(callback: Optional[Callable[[], None]]):
-    """Register a callback to be invoked when any tweak changes."""
-    global _on_tweak_change
-    _on_tweak_change = callback
+    """Compatibility for single-subscriber callers; new code uses subscribe."""
+    global _legacy_unsubscribe
+    if _legacy_unsubscribe is not None:
+        _legacy_unsubscribe()
+    _legacy_unsubscribe = default_changes.subscribe(callback) if callback else None
 
 def _notify_tweak_change():
-    if _on_tweak_change:
-        try:
-            _on_tweak_change()
-        except Exception:
-            pass  # Never let callback errors break tweak changes
+    default_changes.notify()
 
 class Tweak:
     def __init__(
             self,
             key: str,
-            value: any = 1,
+            value: Any = 1,
             owner: int = 501, group: int = 501
         ):
         self.key = key
@@ -28,16 +30,17 @@ class Tweak:
         self.owner = owner
         self.group = group
         self.enabled = False
+        self._change_bus = default_changes
 
     def set_enabled(self, value: bool):
         if self.enabled != value:
             self.enabled = value
-            _notify_tweak_change()
-    def set_value(self, new_value: any, toggle_enabled: bool = True):
+            self._change_bus.notify()
+    def set_value(self, new_value: Any, toggle_enabled: bool = True):
         self.value = new_value
         if toggle_enabled:
             self.enabled = True
-        _notify_tweak_change()
+        self._change_bus.notify()
 
     def apply_tweak(self):
         raise NotImplementedError
@@ -61,7 +64,7 @@ class BasicPlistTweak(Tweak):
             self,
             file_location: FileLocation,
             key: str,
-            value: any = True,
+            value: Any = True,
             owner: int = 501, group: int = 501
         ):
         super().__init__(key=key, value=value, owner=owner, group=group)
@@ -187,7 +190,7 @@ class CompanionKeyTweak(BasicPlistTweak):
             self,
             file_location: FileLocation,
             key: str,
-            value: any = True,
+            value: Any = True,
             companion_keys: Optional[dict] = None,
             owner: int = 501, group: int = 501
         ):
@@ -232,14 +235,14 @@ class AdvancedPlistTweak(BasicPlistTweak):
             out[key] = value
         return out
 
-    def set_multiple_values(self, keys: list[str], value: any):
+    def set_multiple_values(self, keys: list[str], value: Any):
         for key in keys:
             if value and value is not False and value is not None and key in self.never_enable:
                 continue  # hard-protected: this key must never be enabled
             if self.allowed_keys is not None and key not in self.allowed_keys:
                 continue  # not exposed in the UI: never introduce it
             self.value[key] = value
-        _notify_tweak_change()
+        self._change_bus.notify()
 
     def apply_tweak(self, other_tweaks: dict) -> dict:
         if not self.enabled:

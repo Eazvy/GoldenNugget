@@ -28,6 +28,8 @@ included only when backup encryption is enabled — keychain payloads are
 encrypted at rest and iOS rejects them in an unencrypted backup.
 """
 
+from src.utils.filecopy import clone_or_copy
+
 import asyncio
 import os
 import shutil
@@ -196,33 +198,21 @@ async def check_disk_space_for_backup(lockdown_client=None, path: str = None,
 # Importing this module applies it process-wide.
 _sc.DEFAULT_SSL_HANDSHAKE_TIMEOUT = 60
 
-# Fix for Python 3.15 lazy imports: ensure ThreadPoolExecutor is resolved
-# Otherwise asyncio.to_thread() fails with "'lazy_import' object is not callable"
-try:
-    import concurrent.futures as _cf
-    try:
-        from concurrent.futures import ThreadPoolExecutor as _TPE
-        # Replace both dict entry and ensure it's callable via attribute
-        _cf.__dict__['ThreadPoolExecutor'] = _TPE
-        setattr(_cf, 'ThreadPoolExecutor', _TPE)
-    except Exception:
-        pass
-    _ = _cf.ThreadPoolExecutor  # force resolution
-except Exception:
-    pass
+# Resolve the executor through its defining module, including Python 3.15.
+from src.utils.async_disk import ensure_thread_executor
+ensure_thread_executor()
 
 from src.utils.log_util import log_info, log_warn, log_error, log_debug
 
 # --- DeviceLink protocol constants (from pymobiledevice3.services.device_link) ---
 
 # Backup metadata files that must always be preserved (never filtered out)
-_BACKUP_METADATA_FILES = frozenset({
-    "Manifest.db",
-    "Manifest.plist",
-    "Status.plist",
-    "Info.plist",
-    "backup_manifest.db",
-})
+from .backup_store import (
+    _BACKUP_METADATA_FILES, WORKING_COPY_PREFIX, _copy_backup_tree,
+    make_protective_working_copy, make_cache_snapshot, _retire_backup_tree,
+    discard_protective_working_copy, regenerate_cache_from_snapshot,
+    _payload_inventory, _remove_orphan_payloads,
+)
 
 # Domains whose files should be kept in the protective backup.
 PROTECTIVE_DOMAINS = frozenset({
@@ -508,114 +498,14 @@ def backup_disk_space_message(path, available_bytes=None) -> str:
         "the device's full backup estimate.").format(path, available)
 
 
-def _install_device_link_verbose() -> None:
-    """Log free-space traffic and answer purge requests without aborting the link.
-
-    The device decides how much it uploads (and whether it trims large app
-    containers like PosterBoard) based on the free-space value the host reports
-    on ``DLMessageGetFreeDiskSpace`` — the only platform-forked part of the
-    whole backup path (APFS purgeable space on macOS). A purge request is not
-    the device's final verdict. Match the upstream fix after pinned 10.7.1:
-    reply that no space was reclaimed, then wait for success or a real error.
-    https://github.com/doronz88/pymobiledevice3/issues/1879
-    """
-    try:
-        from pymobiledevice3.services.device_link import DeviceLink
-    except Exception as e:  # pragma: no cover - defensive
-        log_debug(f"DeviceLink verbose hook not installed: {e}")
-        return
-    if getattr(DeviceLink, "_gn_verbose_installed", False):
-        return
-    original_receive_message = DeviceLink.receive_message
-
-    async def get_free_disk_space(self, _message):
-        statvfs = shutil.disk_usage(self.root_path).free
-        important = None
-        if sys.platform == "darwin":
-            try:
-                from pymobiledevice3.services.device_link import _darwin_important_available_capacity
-                important = _darwin_important_available_capacity(self.root_path)
-            except Exception as e:
-                log_debug(f"darwin important-capacity lookup failed: {e}")
-        freespace = max(statvfs, important) if important is not None else statvfs
-        log_info(f"DeviceLink free-space query | root={self.root_path} | "
-                 f"statvfs={statvfs} | purgeable_aware={important} | reported={freespace}")
-        self._gn_reported_free_space = freespace
-        await self.status_response(0, status_dict=freespace)
-
-    async def purge_disk_space(self, message):
-        self._gn_purge_requested = True
-        amount = message[1] if len(message) > 1 else None
-        log_warn(f"DeviceLink: device requested host DISK PURGE | root={self.root_path} | "
-                 f"requested_bytes={amount}; no space reclaimed, waiting for device verdict")
-        # The amount is a purge request, not a reliable required-backup size.
-        # Never report fabricated free space or delete user files to satisfy it.
-        await self.status_response(-1, "DLPurgeDiskSpace failed to purge", status_dict=0)
-
-    async def receive_message(self):
-        message = await original_receive_message(self)
-        # Preserve the pinned dl_loop's handling of every other message/error.
-        # MBErrorDomain/105 after a host purge request is an actual refusal.
-        if (getattr(self, "_gn_purge_requested", False)
-                and len(message) > 1 and message[0] == "DLMessageProcessMessage"
-                and isinstance(message[1], dict) and message[1].get("ErrorCode") == 105):
-            raise NotEnoughDiskSpaceError(backup_disk_space_message(
-                self.root_path, getattr(self, "_gn_reported_free_space", None)))
-        return message
-
-    DeviceLink.get_free_disk_space = get_free_disk_space
-    DeviceLink.purge_disk_space = purge_disk_space
-    DeviceLink.receive_message = receive_message
-    DeviceLink._gn_verbose_installed = True
+def _install_device_link_verbose():
+    from .device_link_adapter import install_verbose
+    install_verbose(backup_disk_space_message)
 
 
 def _install_device_link_contents_shim():
-    """Make ``DLContentsOfDirectory`` tolerant of missing directories.
-
-    The device enumerates the prior backup's ``Snapshot`` payload directory
-    during an incremental backup. The cache master keeps payloads directly
-    under ``<udid>/<xx>/<fileid>`` (no ``Snapshot`` subdirectory), so the
-    stock pymobiledevice3 handler crashes on ``path.iterdir()``
-    (FileNotFoundError) instead of answering. Apple's own host answers with an
-    empty listing for a missing directory, which is how the device learns there
-    is nothing to diff against and proceeds to a safe full rebuild. Mirror that:
-    any missing/inaccessible enumeration target yields an empty status dict, so
-    the backup never dies on the probe.
-    """
-    try:
-        import datetime as _datetime
-        from pymobiledevice3.services.device_link import APPLE_EPOCH, DeviceLink
-        from typing import cast
-    except Exception as e:  # pragma: no cover - defensive
-        log_debug(f"DeviceLink contents shim not installed: {e}")
-        return
-    if getattr(DeviceLink, "_gn_contents_installed", False):
-        return
-
-    async def contents_of_directory(self, message):
-        data = {}
-        path = self.root_path / cast(str, message[1])
-        if path.is_dir():
-            for file in path.iterdir():
-                ftype = "DLFileTypeUnknown"
-                if file.is_dir():
-                    ftype = "DLFileTypeDirectory"
-                if file.is_file():
-                    ftype = "DLFileTypeRegular"
-                modifications_data = _datetime.datetime.fromtimestamp(file.stat().st_mtime - APPLE_EPOCH)
-                modifications_data = modifications_data.replace(tzinfo=None)
-                data[file.name] = {
-                    "DLFileType": ftype,
-                    "DLFileSize": file.stat().st_size,
-                    "DLFileModificationDate": modifications_data,
-                }
-        else:
-            log_debug(f"DeviceLink contents-of-directory: \"{message[1]}\" absent "
-                      f"under {self.root_path} — answering with an empty listing")
-        await self.status_response(0, status_dict=data)
-
-    DeviceLink.contents_of_directory = contents_of_directory
-    DeviceLink._gn_contents_installed = True
+    from .device_link_adapter import install_contents
+    install_contents()
 
 
 _install_device_link_verbose()
@@ -842,8 +732,8 @@ async def perform_protective_backup(
     # uses ``afc_media_dir_for(backup_root)`` (a sibling of the run's
     # device_backup); the CACHE path hands over its persistent per-device
     # media store, and with ``afc_media_diff=True`` the refresh only pulls
-    # objects that are new/changed on the device (size-compared against the
-    # existing store).
+    # objects that are new/changed on the device (size and device modification
+    # time compared against the previous verified pull).
     afc_media_task = None
     if include_afc_media:
         media_dir = media_root or afc_media_dir_for(backup_root)
@@ -938,7 +828,7 @@ async def perform_protective_backup(
                 if progress_callback:
                     progress_callback(message)
                 raise BackupDiskSpaceError(message) from e
-    except Exception:
+    except BaseException:
         if afc_media_task is not None:
             # The backup failed — the media pull (still uploading user data) is
             # pointless without a backup to restore it next to. Cancel it and
@@ -1000,7 +890,6 @@ async def is_backup_encrypted(lockdown_client: LockdownClient) -> bool:
 
 # Disposable working copies carry a prefix of their own so the periodic sweep
 # in restore.py can never match a real backup.
-WORKING_COPY_PREFIX = "nugget_working_"
 
 # Retention for finished live backups: how many to keep per device. A new run
 # replaces the previous one — old full copies just burn the very disk space an
@@ -1215,54 +1104,14 @@ def regenerate_cache_from_snapshot(snapshot_dir: str, backup_root: str, udid: st
 
 
 def verify_backup_payloads(backup_dir: "str | Path", udid: str,
-                           manifest_password: str = "") -> list:
-    """Return relativePaths of regular-file manifest rows whose payload is missing.
-
-    Such rows make the Phase 3 restore fail with MBErrorDomain/205 (the device
-    requests the payload and the host cannot provide it). For encrypted backups
-    the manifest is decrypted locally first (``manifest_password``) so the same
-    check still runs instead of being silently skipped.
-    """
-    device_dir = Path(backup_dir) / udid
-    if not device_dir.is_dir():
-        if (Path(backup_dir) / "Manifest.db").is_file():
-            device_dir = Path(backup_dir)
-        else:
-            return []
-    manifest_db = device_dir / "Manifest.db"
-    if not manifest_db.exists():
-        return []
-    decrypted_tmp = None
-    if not _validate_sqlite_db(manifest_db):
-        if not _is_encrypted_backup(device_dir):
-            return []
-        if not manifest_password:
-            log_warn("Manifest.db is encrypted and no password was given — "
-                     "skipping local payload verification")
-            return []
-        try:
-            decrypted_tmp = tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False)
-            decrypted_tmp.close()
-            Mobilebackup2Service._decrypt_backup_manifest_db(
-                device_dir, manifest_password, Path(decrypted_tmp.name))
-            manifest_db = Path(decrypted_tmp.name)
-        except Exception as e:
-            log_warn(f"Could not decrypt manifest for payload verification: {e}")
-            return []
-    missing = []
-    try:
-        conn = sqlite3.connect(str(manifest_db))
-        try:
-            for file_id, rel_path in conn.execute(
-                    "SELECT fileID, relativePath FROM Files WHERE flags = 1"):
-                if not (device_dir / file_id[:2] / file_id).is_file():
-                    missing.append(rel_path)
-        finally:
-            conn.close()
-    finally:
-        if decrypted_tmp is not None:
-            os.unlink(decrypted_tmp.name)
-    return missing
+                           manifest_password: str = "") -> list[str]:
+    """Return missing paths, raising when verification could not be performed."""
+    from src.restore.verification import inspect_backup_payloads
+    return inspect_backup_payloads(
+        backup_dir, udid, manifest_password, inventory=_payload_inventory,
+        is_sqlite=_validate_sqlite_db, is_encrypted=_is_encrypted_backup,
+        decrypt=Mobilebackup2Service._decrypt_backup_manifest_db,
+    ).require_verified()
 
 
 def posterboard_structure_version(rel_path: str) -> int:
@@ -1433,14 +1282,7 @@ def extract_posterboard_db(backup_root: str, udid: str, dest_path: str) -> Optio
     return str(dest), structure_version
 
 
-def _iter_payload_files(device_dir: Path):
-    """Yield every payload file in the backup, flat or in hash subdirectories."""
-    for entry in sorted(device_dir.iterdir()):
-        if entry.is_file():
-            if entry.name not in _BACKUP_METADATA_FILES:
-                yield entry
-        elif entry.is_dir():
-            yield from _iter_payload_files(entry)
+from src.restore.verification import PruneResult
 
 
 def _keep_protective_entry(domain: str, relative_path: str, include_photos: bool = True,
@@ -1464,7 +1306,8 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
                              include_photos: bool = True,
                              include_keychain: bool = False,
                              manifest_password: str = "",
-                             exclude_afc_media_trees: bool = False) -> tuple:
+                             exclude_afc_media_trees: bool = False,
+                             collect_inode: bool = False) -> PruneResult:
     """Prune a backup directory down to its protective payload.
 
     1. Deletes every non-protective row from Manifest.db in a single DELETE
@@ -1488,16 +1331,16 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
         if (Path(backup_dir) / "Manifest.db").exists():
             device_dir = Path(backup_dir)
         else:
-            return 0, 0
+            return PruneResult()
 
     manifest_db = device_dir / "Manifest.db"
     if not manifest_db.exists():
-        return 0, 0
+        return PruneResult()
 
     if _is_encrypted_backup(device_dir):
         if not manifest_password:
             log_info("Backup is encrypted and no password was given — skipping local manifest pruning")
-            return 0, 0
+            return PruneResult()
         def _keep(bf) -> bool:
             if bf.domain is None or bf.relative_path is None:
                 return False
@@ -1505,25 +1348,20 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
                                           exclude_afc_media_trees)
         allowed_ids = Mobilebackup2Service.prune_backup_manifest(
             device_dir, _keep, password=manifest_password)
-        removed_files = 0
-        for payload in _iter_payload_files(device_dir):
-            if payload.name not in allowed_ids:
-                payload.unlink(missing_ok=True)
-                removed_files += 1
-        for dirpath, _dirnames, _filenames in os.walk(device_dir, topdown=False):
-            d = Path(dirpath)
-            if d != device_dir and not any(d.iterdir()):
-                d.rmdir()
+        removed_files = _remove_orphan_payloads(_payload_inventory(device_dir), allowed_ids)
         log_info(f"Encrypted manifest pruned with password (-{removed_files} orphan payloads)")
-        return 0, removed_files
+        return PruneResult(removed_files=removed_files)
 
     if not _validate_sqlite_db(manifest_db):
         log_error(f"Manifest.db at {manifest_db} is not a valid SQLite database. Skipping cleanup.")
-        return 0, 0
+        return PruneResult()
 
     keep_ids = set()
     removed_rows = 0
     missing_payloads = []
+    inventory = _payload_inventory(device_dir)
+    present = inventory[3]
+    max_inode = None
     conn = sqlite3.connect(str(manifest_db))
     try:
         cur = conn.cursor()
@@ -1534,7 +1372,7 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
                 # only regular files carry a <aa>/<fileID> payload; directory
                 # rows (flags=2) MUST survive without one — dropping them
                 # makes the restore agent fail with renameatx ENOENT
-                if flags == 1 and not (device_dir / file_id[:2] / file_id).is_file():
+                if flags == 1 and file_id not in present:
                     # a file row without a payload makes the restore fail with
                     # MBErrorDomain/205 — drop it and let the device's own
                     # data stand
@@ -1551,20 +1389,14 @@ def clean_backup_for_restore(backup_dir: "str | Path", udid: str,
                         ((fid,) for fid in keep_ids))
         cur.execute("DELETE FROM Files WHERE fileID NOT IN (SELECT fileID FROM nugget_keep)")
         removed_rows = max(cur.rowcount, 0)
+        if collect_inode:
+            # Only read blobs surviving the prune. Reading all original blobs
+            # would make a mostly-drained master needlessly expensive to scan.
+            from src.restore.inject import _max_inode_in_manifest
+            max_inode = _max_inode_in_manifest(conn)
         conn.commit()
     finally:
         conn.close()
 
-    removed_files = 0
-    for payload in _iter_payload_files(device_dir):
-        if payload.name not in keep_ids:
-            payload.unlink(missing_ok=True)
-            removed_files += 1
-
-    # Remove directories left empty (deepest first).
-    for dirpath, _dirnames, _filenames in os.walk(device_dir, topdown=False):
-        d = Path(dirpath)
-        if d != device_dir and not any(d.iterdir()):
-            d.rmdir()
-
-    return removed_rows, removed_files
+    removed_files = _remove_orphan_payloads(inventory, keep_ids)
+    return PruneResult(removed_rows, removed_files, max_inode)

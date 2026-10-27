@@ -1,7 +1,7 @@
 from src.controllers.archive_safety import package_matches
 from . import TemplateOption
 
-from typing import Optional
+from typing import Any, Optional
 from enum import Enum
 from PySide6.QtGui import QColor
 from PySide6 import QtWidgets, QtCore
@@ -29,13 +29,13 @@ class SetOption(TemplateOption):
 
     # toggle options
     inverted: bool = False # if set to true, the bool value will be inverted
-    toggle_off_value: Optional[any] = None # the value to set when the toggle is off (for non-boolean values)
-    toggle_on_value: Optional[any] = None # the value to set when the toggle is on (for non-boolean values)
+    toggle_off_value: Optional[Any] = None # the value to set when the toggle is off (for non-boolean values)
+    toggle_on_value: Optional[Any] = None # the value to set when the toggle is on (for non-boolean values)
 
     # color picker options
     sets_opacity: bool = False # whether or not the color_picker sets the opacity value
 
-    value: any = 0 # whether or not to delete the file
+    value: Any = 0 # whether or not to delete the file
     value_tag: Optional[str] = None # the value tag in the caml (ie "scale(0 0 0)")
 
     def split_value(self, value):
@@ -136,14 +136,14 @@ class SetOption(TemplateOption):
         elif self.setter_type == SetterType.textbox:
             # textbox input
             bx_widget = QtWidgets.QWidget(options_widget)
-            bx_layout = QtWidgets.QVBoxLayout(options_widget)
+            bx_layout = QtWidgets.QVBoxLayout(bx_widget)
             bx_layout.setContentsMargins(0, 2, 0, 2)
             bx_lbl = QtWidgets.QLabel(bx_widget)
             bx_lbl.setText(self.label)
             bx_layout.addWidget(bx_lbl)
             textbox = QtWidgets.QLineEdit(bx_widget)
             textbox.setPlaceholderText("Value")
-            textbox.setText(self.value)
+            textbox.setText(str(self.convert_back(self.value)))
             textbox.textEdited.connect(self.update_value)
             bx_layout.addWidget(textbox)
             bx_widget.setLayout(bx_layout)
@@ -159,7 +159,7 @@ class SetOption(TemplateOption):
             for i in range(list_len):
                 # slider input
                 slid_widget = QtWidgets.QWidget(options_widget)
-                slid_layout = QtWidgets.QVBoxLayout(options_widget)
+                slid_layout = QtWidgets.QVBoxLayout(slid_widget)
                 slid_layout.setContentsMargins(0, 2, 0, 2)
                 slid_lbl = QtWidgets.QLabel(slid_widget)
                 slid_lbl.setText(f"{self.label}: {vals[i]}")
@@ -167,7 +167,7 @@ class SetOption(TemplateOption):
                 self.label_objects.append(slid_lbl)
                 # widget for min and max values with slider
                 val_widget = QtWidgets.QWidget(slid_widget)
-                val_layout = QtWidgets.QHBoxLayout(slid_widget)
+                val_layout = QtWidgets.QHBoxLayout(val_widget)
                 min_lbl = QtWidgets.QLabel(val_widget)
 
                 min_val_fixed = self.min_value
@@ -176,13 +176,9 @@ class SetOption(TemplateOption):
                 max_val = self.convert_float(self.max_value)
                 step = self.convert_float(self.step)
                 val = self.convert_float(self.value)
-                if isinstance(min_val, list):
-                    min_val_fixed = min_val_fixed[i]
-                    min_val = min_val[i]
-                    max_val_fixed = max_val_fixed[i]
-                    max_val = max_val[i]
-                    step = step[i]
-                    val = val[i]
+                min_val_fixed, min_val, max_val_fixed, max_val, step, val = (
+                    item[i] if isinstance(item, list) else item
+                    for item in (min_val_fixed, min_val, max_val_fixed, max_val, step, val))
                 min_lbl.setText(str(min_val_fixed))
                 val_layout.addWidget(min_lbl)
                 slider = QtWidgets.QSlider(val_widget)
@@ -205,13 +201,13 @@ class SetOption(TemplateOption):
         elif self.setter_type == SetterType.color_picker:
             # color picker input
             col_widget = QtWidgets.QWidget(options_widget)
-            col_layout = QtWidgets.QHBoxLayout(options_widget)
+            col_layout = QtWidgets.QHBoxLayout(col_widget)
             col_layout.setContentsMargins(0, 2, 0, 2)
             col_lbl = QtWidgets.QLabel(col_widget)
             col_lbl.setText(self.label)
             col_layout.addWidget(col_lbl)
             col_picker_bg = QtWidgets.QWidget(col_widget)
-            col_picker_bg_layout = QtWidgets.QStackedLayout(col_widget)
+            col_picker_bg_layout = QtWidgets.QStackedLayout(col_picker_bg)
             col_picker_bg_layout.setStackingMode(QtWidgets.QStackedLayout.StackAll)
             col_picker_img = QtWidgets.QToolButton(col_picker_bg)
             col_picker_img.setText("")
@@ -260,10 +256,7 @@ class SetOption(TemplateOption):
         if self.value_type != "float":
             return value
         if isinstance(value, list):
-            new_list = value
-            for i in range(len(new_list)):
-                new_list[i] = self.convert_float(new_list[i])
-            return new_list
+            return [self.convert_float(item) for item in value]
         return int(value * 1000)
     def convert_str(self, value: str):
         # convert string to either float or int
@@ -286,8 +279,7 @@ class SetOption(TemplateOption):
             return value
         elif isinstance(value, list):
             # convert values to strings
-            for i in range(len(back_list)):
-                back_list[i] = str(back_list[i])
+            back_list = [str(item) for item in value]
         back_str = ' '.join(back_list)
         if self.value_tag != None:
             back_str = self.value_tag + "(" + back_str + ")"
@@ -343,7 +335,7 @@ class SetOption(TemplateOption):
                     # plain text editing
                     with open(full_path, "r") as in_file:
                         contents = in_file.read()
-                    # replace occurrances and overwrite
+                    # replace occurrences and overwrite
                     contents = contents.replace(self.key, str(apply_val))
                     with open(full_path, "w") as out_file:
                         out_file.write(contents)
