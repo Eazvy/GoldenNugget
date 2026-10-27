@@ -22,6 +22,17 @@ class IncrementalBuilder(QObject):
             self._steps.close()
             self._steps = None
 
+    def finish(self):
+        self._timer.stop()
+        try:
+            while self._steps is not None:
+                next(self._steps)
+        except StopIteration:
+            self._steps = None
+        except Exception:
+            self.cancel()
+            raise
+
     def _advance(self):
         deadline = perf_counter() + 0.004
         try:

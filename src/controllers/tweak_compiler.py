@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from functools import singledispatch
 import logging
+import inspect
 import plistlib
 from tempfile import TemporaryDirectory
 from typing import Callable, Mapping
@@ -24,6 +25,9 @@ from src.tweaks.basic_plist_locations import FileLocation
 from src.tweaks.compatibility import hardware_reasons
 from src.devicemanagement.device_capabilities import has_dynamic_island
 from src.tweaks.registry import SPECS_BY_ID, HOME_PREFIX, managed_pref_target
+from src.tweaks.posterboard.device_overrides import PosterKitOverrides
+from src.tweaks.candidate_preferences import InstalledAppSuggestionsBlacklist
+from src.tweaks.tweak_classes import ResearchOnlyTweak
 
 log = logging.getLogger("GoldenNugget.compiler")
 
@@ -39,6 +43,7 @@ class CompilationContext:
     concat_file: Callable
     add_community_files: Callable
     update_label: Callable
+    udid: str = ''
 
 
 @dataclass
@@ -124,6 +129,28 @@ def _compile_siri(tweak, tweak_id, state):
     state.artifacts.uses_domains = True
 
 
+@compile_one.register(PosterKitOverrides)
+async def _compile_posterkit(tweak,tweak_id,state):
+    if not tweak.enabled or not tweak.value:
+        return
+    context=state.context
+    if not context.store[TweakID.PosterBoard].is_empty() or context.templates:
+        raise NuggetException('Apply PosterKit settings separately from wallpaper imports and resets.')
+    from src.restore.posterboard_backup import pull_posterboard_container
+    directory=TemporaryDirectory()
+    state.artifacts.temporary_dirs.append(directory)
+    context.update_label(QCoreApplication.tr('Fetching current wallpaper configurations...'))
+    await pull_posterboard_container(context.udid,directory.name,update_label=context.update_label)
+    state.artifacts.files.extend(tweak.stage(directory.name))
+    state.artifacts.uses_domains=True
+
+
+@compile_one.register(ResearchOnlyTweak)
+def _compile_research(tweak,tweak_id,state):
+    if tweak.enabled:
+        raise NuggetException(tweak.reason)
+
+
 async def compile_tweaks(context: CompilationContext, hotload, unavailable=()) -> TweakArtifacts:
     state = _Compilation(context)
     store, version, model = context.store, context.version, context.model
@@ -143,7 +170,11 @@ async def compile_tweaks(context: CompilationContext, hotload, unavailable=()) -
             if tweak_id.name in hidden or hotload.rule_for(tweak_id, device_version=version, device_model=model) is not None:
                 skipped.append(tweak_id)
                 continue
-            compile_one(tweak, tweak_id, state)
+            if isinstance(tweak,InstalledAppSuggestionsBlacklist) and tweak.enabled:
+                await tweak.prepare_for_device(context.udid)
+            result=compile_one(tweak, tweak_id, state)
+            if inspect.isawaitable(result):
+                await result
 
         community_plists, community_files = {}, {}
         if TweakID.Templates in store and TweakID.Templates not in skipped:
@@ -167,6 +198,8 @@ async def compile_tweaks(context: CompilationContext, hotload, unavailable=()) -
             owner = state.ownership.get(location, 501)
             if location.value in community_plists:
                 values = {**community_plists.pop(location.value)[0], **values}
+            if not values:
+                continue
             payload = plistlib.dumps(values)
             context.concat_file(contents=payload, path=location.value,
                                 files_to_restore=state.artifacts.files, owner=owner, group=owner)
@@ -177,8 +210,9 @@ async def compile_tweaks(context: CompilationContext, hotload, unavailable=()) -
         home = state.plists.get(FileLocation.globalPreferences, {})
         if FileLocation.globalPreferencesHomeDomain.value in community_plists:
             home = {**community_plists.pop(FileLocation.globalPreferencesHomeDomain.value)[0], **home}
-        context.concat_file(contents=plistlib.dumps(home), path=FileLocation.globalPreferencesHomeDomain.value,
-                            files_to_restore=state.artifacts.files, owner=501, group=501)
+        if home:
+            context.concat_file(contents=plistlib.dumps(home), path=FileLocation.globalPreferencesHomeDomain.value,
+                                files_to_restore=state.artifacts.files, owner=501, group=501)
         for location, data in state.raw_files.items():
             context.concat_file(contents=data, path=location.value,
                                 files_to_restore=state.artifacts.files, owner=501, group=501)

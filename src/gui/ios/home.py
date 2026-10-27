@@ -1,6 +1,6 @@
 import time
 from PySide6.QtCore import (
-    Qt, QCoreApplication, Slot, QTimer, QSize, QEvent, Signal, QThread,
+    Qt, QCoreApplication, QT_TRANSLATE_NOOP, Slot, QTimer, QSize, QEvent, Signal, QThread,
 )
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import (
@@ -98,7 +98,12 @@ class _TileCard(IOSCard):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMouseTracking(False)
+        self.setMouseTracking(True)
+
+    def showEvent(self,event):
+        for label in self.findChildren(QLabel):
+            label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        super().showEvent(event)
 
     def _retheme(self):
         self.setStyleSheet(t("home_tile"))
@@ -415,7 +420,7 @@ class IOSHomePage(QWidget):
         self.control_tabs.currentChanged.connect(self._on_control_tab_changed)
 
         cards_row = [self._make_card(
-            "PosterBoard", "Animated wallpapers & templates", 2),
+            "PosterBoard", QT_TRANSLATE_NOOP("Nugget", "Animated wallpapers & video"), 2),
             self._make_card(
             "Tweaks", "Customize system settings", 1),
             self._make_card(
@@ -430,7 +435,7 @@ class IOSHomePage(QWidget):
          self.statusbar_card, _, self.passcode_theme_card) = cards_row
         self.cards_grid = _CardGrid(cards_row)
         layout.addWidget(self.cards_grid)
-        # a slim row instead of a seventh tile, so the six tiles keep one row
+        # Keep the catalog as a compact row below the feature tiles.
         self.catalog_card = self._make_catalog_row()
         layout.addWidget(self.catalog_card)
 
@@ -712,7 +717,7 @@ class IOSHomePage(QWidget):
         self.window.open_presets_section()
 
     def switch_to_ios_page(self, index: int):
-        self.window.show_ios_page(index)
+        self.window.bottom_navigation.navigate(index)
 
     def open_apply_classic(self):
         """Open the dedicated Apply page before starting an operation."""
@@ -1050,6 +1055,7 @@ class IOSHomePage(QWidget):
     def _make_card(self, title: str, subtitle: str, page_index: int) -> IOSCard:
         """One home feature tile: a big themed icon with the name below it."""
         card = _TileCard()
+        card.setProperty('liquidHomeCard',True)
         card.setMaximumWidth(180)
         card.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Preferred)
@@ -1060,9 +1066,11 @@ class IOSHomePage(QWidget):
         card_layout.setAlignment(Qt.AlignHCenter)
 
         icon_res = FEATURE_ICONS.get(title, ":/icon/compass.svg")
-        icon_lbl = QLabel(card)
+        from src.gui.liquid.controls import MagnifyingArtwork
+        icon_lbl = MagnifyingArtwork(card)
         icon_lbl.setFixedSize(140, 128)
         icon_lbl.setAlignment(Qt.AlignCenter)
+        card._home_artwork_motion=icon_lbl
         # transparent, so the label never paints the palette window color over
         # the tile (see the home_tile_* styles)
         icon_lbl.setStyleSheet("background-color: transparent;")
@@ -1093,6 +1101,7 @@ class IOSHomePage(QWidget):
     def _make_catalog_row(self) -> IOSCard:
         """The Community Catalog entry: icon, name and caption on one line."""
         card = _TileCard()
+        card.setProperty('liquidCatalog',True)
         row = QHBoxLayout(card)
         row.setContentsMargins(16, 10, 16, 10)
         row.setSpacing(12)

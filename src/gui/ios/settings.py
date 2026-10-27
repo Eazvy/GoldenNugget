@@ -2,10 +2,11 @@ from src.devicemanagement.device_capabilities import device_os_name
 from PySide6.QtCore import Qt, QCoreApplication, QTimer, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
-    QComboBox, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QInputDialog,
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QInputDialog,
     QFileDialog, QDialog, QProgressDialog, QGraphicsOpacityEffect, QAbstractButton, QPushButton
 )
 import sys
+from src.gui.liquid.choice_editor import GlassComboBox as QComboBox
 from pathlib import Path
 
 from src.exceptions.nugget_exception import NuggetException
@@ -753,6 +754,7 @@ class IOSSettingsPage(QWidget):
         row.addWidget(label, 1)
 
         self.lang_drp = QComboBox()
+        self.lang_drp.setProperty('liveTranslateItems', True)
         self._lang_drp = self.lang_drp
         for language, code in available_languages.items():
             self.lang_indexes.append(code)
@@ -774,7 +776,15 @@ class IOSSettingsPage(QWidget):
         new_lang = self.lang_indexes[index]
         current_choice = self.window.settings.value('locale_code', '', type=str) or ''
         if new_lang != current_choice:
-            self.window.translator.set_new_language(new_lang, restart=True)
+            self.window.translator.set_new_language(new_lang)
+            from PySide6.QtCore import QSignalBlocker
+            liquid = getattr(self.window, 'liquid', None)
+            panel = getattr(liquid, 'settings', None)
+            for combo in (getattr(self, 'lang_drp', None), getattr(panel, 'language', None)):
+                if combo is not None:
+                    blocker = QSignalBlocker(combo)
+                    combo.setCurrentIndex(index)
+                    del blocker
 
     def _make_pb_setup_section(self):
         c = self._tm.colors

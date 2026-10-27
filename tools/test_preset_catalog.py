@@ -367,19 +367,53 @@ class Dialogs(unittest.TestCase):
         self.assertEqual(added, [('dock-tweaks.batter', '26.1')])
         self.assertEqual(dialog.added_templates, [str(store / 'dock-tweaks.batter')])
 
-    def test_templates_tab_links_to_batter_builder(self):
+    def test_templates_page_links_to_batter_builder(self):
         from types import SimpleNamespace
-        from src.gui.ios import posterboard
-        page = posterboard.IOSPosterboardPage(SimpleNamespace(settings=None, device_manager=None))
+        from src.gui.ios import templates
+        page = templates.IOSTemplatesPage(SimpleNamespace(settings=None, device_manager=None))
         self.addCleanup(page.deleteLater)
         card = page.templates_builder_card
         self.assertEqual(page._builder_title.text(), 'Create Your Own Template')
         self.assertEqual(page.templates_layout.indexOf(card), 1, 'right under the import button')
-        with mock.patch.object(posterboard.QDesktopServices, 'openUrl') as open_url:
+        with mock.patch.object(templates.QDesktopServices, 'openUrl') as open_url:
             card.mousePressEvent(None)
         self.assertIn('GoldenNugget-TemplateBuilder/releases', open_url.call_args[0][0].toString())
         page._load_templates_list()
         self.assertEqual(page.templates_layout.indexOf(card), 1, 'refreshing the list keeps the card')
+
+    def test_catalog_refreshes_the_dedicated_templates_page(self):
+        from types import SimpleNamespace
+        from src.gui.dialogs.preset_catalog import refresh_template_list
+        templates = mock.Mock()
+        posterboard = mock.Mock()
+        refresh_template_list(SimpleNamespace(ios_templates=templates, ios_posterboard=posterboard))
+        templates._load_templates_list.assert_called_once_with()
+        posterboard._load_templates_list.assert_not_called()
+
+    def test_templates_page_import_and_empty_refresh(self):
+        from types import SimpleNamespace
+        from src.gui.ios import templates
+        from src.tweaks.posterboard.template_options.templates_tweak import TemplatesTweak
+        holder = TemplatesTweak()
+        with mock.patch.dict(templates.tweaks, {templates.TweakID.Templates: holder}):
+            page = templates.IOSTemplatesPage(SimpleNamespace(
+                device_manager=SimpleNamespace(get_current_device_version=lambda: '26.2')))
+            self.addCleanup(page.deleteLater)
+            path = batter(Path(self.tmp.name) / 'import.batter')
+            with mock.patch('PySide6.QtWidgets.QFileDialog.getOpenFileNames',
+                            return_value=([str(path)], '')), \
+                    mock.patch('PySide6.QtWidgets.QMessageBox.warning') as warning:
+                page.templates_import_btn.click()
+            warning.assert_not_called()
+            self.assertEqual(len(holder.templates), 1)
+            self.assertEqual(holder.templates[0].name, 'Dock Tweaks')
+            self.assertTrue(page.templates_placeholder.isHidden())
+            self.assertEqual(page.templates_layout.count(), 4)
+            holder.templates[0].clean_files()
+            holder.templates.clear()
+            page._load_templates_list()
+            self.assertFalse(page.templates_placeholder.isHidden())
+            self.assertEqual(page.templates_layout.count(), 3)
 
     def test_embedded_page_mode(self):
         from PySide6.QtWidgets import QPushButton

@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (
     QPushButton, QScrollArea, QToolButton, QStackedWidget,
     QCheckBox, QComboBox
 )
-from PySide6.QtGui import QPixmap, QIcon, QImageReader, QDesktopServices
+from PySide6.QtGui import QPixmap, QIcon, QImageReader
+from src.gui.liquid.choice_editor import GlassComboBox as QComboBox
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 from src.gui.widgets import (
@@ -14,9 +15,6 @@ from src.gui.widgets import (
 )
 from src.gui.theme import ColorThemeManager, t, theme_pixmap
 from src.tweaks.tweaks import tweaks, TweakID
-
-# Batter Builder: the visual editor for .batter templates with community tweaks.
-BATTER_BUILDER_URL = "https://github.com/GoldenNugget-Team/GoldenNugget-TemplateBuilder/releases/latest"
 
 
 class TendieRow(IOSCard):
@@ -206,13 +204,13 @@ class IOSPosterboardPage(QWidget):
         self.tendies_page = self._create_tendies_tab()
         self.tab_stack.addWidget(self.tendies_page)
 
-        # Templates tab
-        self.templates_page = self._create_templates_tab()
-        self.tab_stack.addWidget(self.templates_page)
-
         # Video tab
         self.video_page = self._create_video_tab()
         self.tab_stack.addWidget(self.video_page)
+        from src.gui.ios.tweaks import IOSSectionPage
+        from src.tweaks.registry import Section
+        self.preferences_page=IOSSectionPage(window,Section.POSTERBOARD)
+        self.tab_stack.addWidget(self.preferences_page)
 
         # Tab bar on top, sharing its row with "Check Package…": a mobile-style
         # bottom bar sat in the middle of the window, above the reset footer,
@@ -225,12 +223,12 @@ class IOSPosterboardPage(QWidget):
         tab_layout.setSpacing(4)
 
         self.tendies_tab_btn = self._make_tab_button(QCoreApplication.translate("Nugget", "Tendies"), ":/icon/wallpaper.svg", 0)
-        self.templates_tab_btn = self._make_tab_button(QCoreApplication.translate("Nugget", "Templates"), ":/icon/photo-stack.svg", 1)
-        self.video_tab_btn = self._make_tab_button(QCoreApplication.translate("Nugget", "Video"), ":/icon/play-circle.svg", 2)
+        self.video_tab_btn = self._make_tab_button(QCoreApplication.translate("Nugget", "Video"), ":/icon/play-circle.svg", 1)
 
         tab_layout.addWidget(self.tendies_tab_btn)
-        tab_layout.addWidget(self.templates_tab_btn)
         tab_layout.addWidget(self.video_tab_btn)
+        self.preferences_tab_btn=self._make_tab_button(self.tr('Preferences'),':/icon/wallpaper.svg',2)
+        tab_layout.addWidget(self.preferences_tab_btn)
         tab_layout.addStretch()
         tab_layout.addWidget(self._check_btn)
 
@@ -258,7 +256,7 @@ class IOSPosterboardPage(QWidget):
         self._tab_bar.setStyleSheet(
             f"QWidget#pbTabBar {{ background-color: {c.bg_primary}; }}"
         )
-        for btn in (self.tendies_tab_btn, self.templates_tab_btn, self.video_tab_btn):
+        for btn in (self.tendies_tab_btn, self.video_tab_btn,self.preferences_tab_btn):
             btn.setStyleSheet(f"""
                 QToolButton {{
                     background: transparent;
@@ -276,7 +274,6 @@ class IOSPosterboardPage(QWidget):
                 }}
             """)
         self._retheme_tendies_tab()
-        self._retheme_templates_tab()
         self._retheme_video_tab()
         self._update_tab_icons()
 
@@ -319,32 +316,6 @@ class IOSPosterboardPage(QWidget):
                 f"font-size: 26px; color: {c.text_secondary}; background-color: transparent;"
             )
 
-    def _retheme_templates_tab(self):
-        c = ColorThemeManager.instance().colors
-        if hasattr(self, '_templates_scroll'):
-            self._templates_scroll.setStyleSheet(
-                f"background-color: {c.bg_primary}; border: none;"
-            )
-        if hasattr(self, 'templates_placeholder'):
-            self.templates_placeholder.setStyleSheet(
-                f"font-size: 15px; color: {c.text_secondary}; background-color: transparent;"
-            )
-        if hasattr(self, '_builder_icon'):
-            self._builder_icon.setStyleSheet(
-                f"QLabel {{ background-color: {c.accent}; border-radius: 12px; font-size: 24px; color: {c.text_inverse}; }}"
-            )
-        if hasattr(self, '_builder_title'):
-            self._builder_title.setStyleSheet(
-                f"font-size: 16px; font-weight: 600; color: {c.text_primary}; background-color: transparent;"
-            )
-        if hasattr(self, '_builder_subtitle'):
-            self._builder_subtitle.setStyleSheet(
-                f"font-size: 12px; color: {c.text_secondary}; background-color: transparent;"
-            )
-        if hasattr(self, '_builder_chevron'):
-            self._builder_chevron.setStyleSheet(
-                f"font-size: 26px; color: {c.text_secondary}; background-color: transparent;"
-            )
 
     def _retheme_video_tab(self):
         c = ColorThemeManager.instance().colors
@@ -406,13 +377,13 @@ class IOSPosterboardPage(QWidget):
     def _switch_tab(self, index: int):
         self.tab_stack.setCurrentIndex(index)
         self.tendies_tab_btn.setChecked(index == 0)
-        self.templates_tab_btn.setChecked(index == 1)
-        self.video_tab_btn.setChecked(index == 2)
+        self.video_tab_btn.setChecked(index == 1)
+        self.preferences_tab_btn.setChecked(index == 2)
         self._update_tab_icons()
 
     def _update_tab_icons(self):
         c = ColorThemeManager.instance().colors
-        for button in (self.tendies_tab_btn, self.templates_tab_btn, self.video_tab_btn):
+        for button in (self.tendies_tab_btn, self.video_tab_btn,self.preferences_tab_btn):
             color = c.accent if button.isChecked() else c.text_secondary
             button.setIcon(QIcon(theme_pixmap(button.property('icon_resource'), color, 18, self.devicePixelRatioF())))
 
@@ -496,106 +467,6 @@ class IOSPosterboardPage(QWidget):
 
         return card
 
-    def _create_templates_tab(self) -> QWidget:
-        self._templates_scroll = QScrollArea()
-        self._templates_scroll.setWidgetResizable(True)
-        self._templates_scroll.setFrameStyle(QScrollArea.NoFrame)
-
-        content = QWidget()
-        self.templates_layout = QVBoxLayout(content)
-        self.templates_layout.setContentsMargins(16, 16, 16, 32)
-        self.templates_layout.setSpacing(12)
-        self.templates_layout.setAlignment(Qt.AlignTop)
-        self._templates_scroll.setWidget(content)
-
-        import_btn = IOSPrimaryButton(QCoreApplication.translate("Nugget", "  Import Templates (.batter)"))
-        import_btn.clicked.connect(self.show_add_templates_dialog)
-        self.templates_import_btn = import_btn
-        self.templates_layout.addWidget(import_btn)
-
-        self.templates_builder_card = self._create_builder_card()
-        self.templates_layout.addWidget(self.templates_builder_card)
-
-        self.templates_placeholder = QLabel(QCoreApplication.translate("Nugget", "No templates added yet"))
-        self.templates_placeholder.setAlignment(Qt.AlignCenter)
-        self.templates_layout.addWidget(self.templates_placeholder)
-
-        self._load_templates_list()
-
-        return self._templates_scroll
-
-    def _create_builder_card(self) -> QWidget:
-        """A row that opens Batter Builder's download page, for people who
-        want to make a template of their own instead of writing JSON."""
-        card = IOSCard()
-        card.setCursor(Qt.PointingHandCursor)
-        card.setMinimumHeight(88)
-        card.mousePressEvent = lambda e: self.open_batter_builder()
-
-        inner = QHBoxLayout(card)
-        inner.setContentsMargins(16, 12, 16, 12)
-        inner.setSpacing(12)
-
-        self._builder_icon = QLabel()
-        self._builder_icon.setFixedSize(48, 48)
-        self._builder_icon.setAlignment(Qt.AlignCenter)
-        self._builder_icon.setText("\u270E")
-        inner.addWidget(self._builder_icon)
-
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        self._builder_title = QLabel(QCoreApplication.translate("Nugget", "Create Your Own Template"))
-        text_col.addWidget(self._builder_title)
-        self._builder_subtitle = QLabel(QCoreApplication.translate(
-            "Nugget", "Batter Builder makes switches, sliders and lists without writing JSON"))
-        self._builder_subtitle.setWordWrap(True)
-        text_col.addWidget(self._builder_subtitle)
-        inner.addLayout(text_col, 1)
-
-        self._builder_chevron = QLabel("\u203A")
-        inner.addWidget(self._builder_chevron)
-
-        return card
-
-    def open_batter_builder(self):
-        QDesktopServices.openUrl(QUrl(BATTER_BUILDER_URL))
-
-    def show_add_templates_dialog(self):
-        from PySide6.QtWidgets import QFileDialog, QMessageBox
-        selected_files, _ = QFileDialog.getOpenFileNames(
-            self.window, QCoreApplication.translate("Nugget", "Select Nugget Template Files"), "", "Zip Files (*.batter)"
-        )
-        if selected_files:
-            templates_tweak = tweaks[TweakID.Templates]
-            try:
-                device_version = self.window.device_manager.get_current_device_version()
-            except Exception:
-                device_version = None
-            for file in selected_files:
-                try:
-                    templates_tweak.add_template(file, device_version)
-                except Exception as e:
-                    QMessageBox.warning(self.window, QCoreApplication.translate("Nugget", "Import Failed"), QCoreApplication.translate("Nugget", "Failed to load template:\n{0}\n\n{1}").format(file, str(e)))
-            self._load_templates_list()
-
-    def _load_templates_list(self):
-        from src.tweaks.tweaks import tweaks, TweakID
-        templates = tweaks[TweakID.Templates].templates
-        if not templates:
-            self.templates_placeholder.show()
-            return
-        self.templates_placeholder.hide()
-
-        for i in reversed(range(self.templates_layout.count())):
-            widget = self.templates_layout.itemAt(i).widget()
-            if widget is not None and widget not in (self.templates_placeholder, self.templates_import_btn,
-                                                     self.templates_builder_card):
-                widget.deleteLater()
-
-        widgets = {}
-        for template in templates:
-            template.loaded = False  # its old card was just removed
-            template.create_ui(self.window, tweaks[TweakID.Templates], widgets, self.templates_layout)
 
     def _create_video_tab(self) -> QWidget:
         self._video_scroll = QScrollArea()

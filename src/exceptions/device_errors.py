@@ -25,6 +25,23 @@ def is_find_my_error(exc: BaseException) -> bool:
     return False
 
 
+def is_icloud_restore_in_progress(exc: BaseException) -> bool:
+    pending = [exc]
+    seen = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        text = str(current).casefold()
+        if re.search(r'mberrordomain/25(?:\\D|$)', text) or (
+                'icloud restore' in text and 'in progress' in text):
+            return True
+        pending.extend(error for error in (current.__cause__, current.__context__, *current.args)
+                       if isinstance(error, BaseException))
+    return False
+
+
 def is_device_locked_error(exc: Exception) -> bool:
     """Check if an exception indicates the device is locked (ErrorCode 208)."""
     if is_device_lock_required_error(exc):
@@ -38,6 +55,9 @@ def is_device_locked_error(exc: Exception) -> bool:
 
 def is_connection_error(exc: Exception) -> bool:
     """Check if an exception is a transient connection failure worth retrying."""
+    from src.exceptions.nugget_exception import PosterBoardBackupEncryptionError
+    if isinstance(exc, PosterBoardBackupEncryptionError) or is_icloud_restore_in_progress(exc):
+        return False
     msg = str(exc).lower()
     return isinstance(exc, (
         pm3_exc.ConnectionTerminatedError,
@@ -68,7 +88,7 @@ def is_device_lock_required_error(exc: Exception) -> bool:
 
 def is_transient_restore_error(error) -> bool:
     """True for Phase 3 errors that mean 'device still booting, try again'."""
-    if is_find_my_error(error):
+    if is_find_my_error(error) or is_icloud_restore_in_progress(error):
         return False
     name = type(error).__name__
     msg = str(error)

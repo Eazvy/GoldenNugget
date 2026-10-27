@@ -539,11 +539,15 @@ share 15 indices, but the designer stack is **parked** (`main_window.py:150-152`
 and is not the live navigator. Real navigation uses:
 - `self.pages` — dict of the 9 live classic page wrappers (`pages/main/*`,
   `pages/tools/*`), keyed by `Page`.
-- `self.content_stack` — 3 entries: classic home / iOS root / classic daemons.
-- `self.ios_pages` — 10 hand-built iOS pages (`ios/`): home, tweaks,
+- `self.content_stack` — classic home / iOS root / classic daemons / connect placeholder.
+- `self.ios_pages` — 15 hand-built iOS pages (`ios/`): home, tweaks,
   posterboard, daemons, settings, statusbar, apply, springboard, internal,
-  liquidglass (the last three are `IOSSectionPage` built from the registry
-  `Section` enum).
+  liquidglass, icon themes, passcode themes, presets, community catalog and
+  templates. Springboard, internal and liquidglass are `IOSSectionPage` built
+  from the registry `Section` enum. PosterBoard (index 2) owns Tendies and Video;
+  Templates (index 14, `ios/templates.py`) owns `.batter` tweak imports/editors
+  and the Batter Builder link. Each has a home tile, sidebar item and independent
+  HotLoad feature visibility. Catalog template installs refresh `ios_templates`.
 
 - **Classic** — Qt Designer (`mainwindow.ui` → `mainwindow_ui.py`) wrappers in
   `pages/main/*` and `pages/tools/*`. The classic Daemons page literally embeds

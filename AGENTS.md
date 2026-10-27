@@ -68,8 +68,8 @@ This document describes the background threads, async backup/restore operations,
   `theme_pixmap(resource, color, size, dpr)` (scales the SVG *before* tinting, so
   11x11/16x16 sources stay crisp) instead of `theme_icon()`, which rasterizes at
   the intrinsic size and would be blurry. The Home feature tiles
-  (`src/gui/ios/home.py`) are the reference use: one 68px icon per tile, all six
-  feature tiles in a single row, name + muted subtitle underneath,
+  (`src/gui/ios/home.py`) are the reference use: large icons on seven
+  feature tiles in a responsive grid, name + muted subtitle underneath,
   `_TileCard._retheme` → `t("home_tile")`.
 - **One font everywhere**: the bundled `Inter` variable font is
   registered in `main_app.py` (`QFontDatabase.addApplicationFont` +
@@ -151,6 +151,13 @@ hide whole broken features. Behaviours per rule `action`:
   (`confirm_flagged` in the iOS tweaks/daemons/preset pages).
 - `"kill_app"` — **kill switch**: the app refuses to start (or shuts itself
   down) on matching setups (`main_app._hotload_kill_or_none`).
+- `"badNews"` — **mandatory update**: shows an application-modal update dialog
+  for matching setups, from cached rules at startup and after a rules refresh
+  or device change. No Later button, Escape or window-close dismissal; opening
+  the download leaves the app blocked until it is restarted with an unaffected
+  version. Optional `version` names the available release and `reason` explains
+  the requirement. Scope with `app_versions` or `max_app_version` so the updated
+  build is not blocked. Honours `hotload_enabled` like the other actions.
 - `"hide_feature"` (`feature` field) — **hide a whole feature page**: the
   feature's tweaks are never applied, removed from the iOS UI
   (`_hidden_sections` in `src/gui/ios/tweaks.py`), its Sidebar button and iOS

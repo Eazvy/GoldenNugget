@@ -1,8 +1,8 @@
 from PySide6.QtCore import (
-    Qt, QCoreApplication, Signal as pyqtSignal, QSize, QRectF,
+    Qt, QCoreApplication, Signal as pyqtSignal, QSize, QRectF, QLocale,
     QPropertyAnimation, QEasingCurve, Property, QEvent, QRegularExpression, QTimer,
 )
-from PySide6.QtGui import QPainter, QColor, QIcon, QIntValidator, QDoubleValidator, QRegularExpressionValidator
+from PySide6.QtGui import QPainter, QColor, QIcon, QIntValidator, QDoubleValidator, QRegularExpressionValidator, QValidator
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton, QFrame,
     QSizePolicy, QDialog, QDialogButtonBox, QLineEdit,
@@ -111,6 +111,19 @@ def compact_number_text(value, locale, decimals):
     return text
 
 
+class NumericEntryValidator(QValidator):
+    def __init__(self, range_validator, integral, parent):
+        super().__init__(parent)
+        self.range_validator = range_validator
+        self.integral = integral
+
+    def validate(self, text, position):
+        allowed = '0123456789-+' if self.integral else '0123456789.-+'
+        if any(character not in allowed for character in text):
+            return QValidator.Invalid, text, position
+        return self.range_validator.validate(text, position)
+
+
 class NumberInputDialog(QDialog):
     """Number entry with integer or decimal validation based on the step."""
 
@@ -131,6 +144,10 @@ class NumberInputDialog(QDialog):
 
         self.input = QLineEdit(self)
         self.input.setAccessibleName(title)
+        locale=QLocale.c()
+        locale.setNumberOptions(QLocale.RejectGroupSeparator)
+        self.input.setLocale(locale)
+        self.input.setInputMethodHints(Qt.ImhFormattedNumbersOnly | Qt.ImhNoPredictiveText)
         self.input.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         if self._integral:
             validator = QIntValidator(int(min_val), int(max_val), self.input)
@@ -140,7 +157,8 @@ class NumberInputDialog(QDialog):
             validator.setNotation(QDoubleValidator.StandardNotation)
             text = compact_number_text(current_value, self.input.locale(), self._decimals)
         validator.setLocale(self.input.locale())
-        self.input.setValidator(validator)
+        self._number_validator = NumericEntryValidator(validator, self._integral, self.input)
+        self.input.setValidator(self._number_validator)
         self.input.setText(text)
         layout.addWidget(self.input)
         if not self._integral:

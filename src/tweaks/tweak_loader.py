@@ -1,13 +1,23 @@
 from .tweaks import tweaks, TweakID
-from .registry import SPECS
+from .registry import SPECS, Kind, Section, LOCAL_ONLY_IDS
 from .basic_plist_locations import FileLocation
 from .tweak_classes import BasicPlistTweak, AdvancedPlistTweak, DaemonPlistTweak, NullifyFileTweak
 from .daemons_tweak import DANGEROUS_KEYS, INTERFACE_KEYS
 
 
 def _build_spec(spec):
+    if spec.kind == Kind.POSTER_ARCHIVE:
+        from .posterboard.device_overrides import PosterKitOverrides
+        return PosterKitOverrides()
+    if spec.kind == Kind.WALLPAPER:
+        from copy import deepcopy
+        from .tweak_classes import WallpaperPreferencesTweak
+        return WallpaperPreferencesTweak(spec.location,spec.key,value=deepcopy(spec.value))
     if spec.factory is not None:
         return spec.factory()
+    if spec.id in LOCAL_ONLY_IDS and spec.section==Section.LIQUID_GLASS and spec.kind==Kind.SWITCH and type(spec.value) in (bool,int) and spec.value in (0,1):
+        from .tweak_classes import TriStateBooleanPlistTweak
+        return TriStateBooleanPlistTweak(spec.location,spec.key,spec.value)
     return BasicPlistTweak(spec.location, spec.key, value=spec.value)
 
 

@@ -81,7 +81,6 @@ class Daemon(Enum):
         "com.apple.assistantd",
         "com.apple.voiced"
     ]
-    NanoTimeKit = ["com.apple.nanotimekitcompaniond"]
     FollowUp = ["com.apple.followupd"]
     # --- Safe additions (from MiniVoidyy/GoldenNugget-) grouped by function.
     # Only daemons whose disable is safe and not already removed/disabled by iOS.
@@ -97,11 +96,6 @@ class Daemon(Enum):
     ]
     VideoSubscriptions = ["com.apple.videosubscriptionsd"]
     WebBookmarks = ["com.apple.webbookmarksd"]
-    AppleWatchNano = [
-        "com.apple.nanoregistryd",
-        "com.apple.nanomediacontrold",
-        "com.apple.nanopreferencesd"
-    ]
     Feedback = ["com.apple.feedbackd"]
     WifiLogging = ["com.apple.wifilogd"]
     Maps = ["com.apple.geod"]
@@ -178,10 +172,10 @@ INTERFACE_DAEMONS: frozenset["Daemon"] = frozenset({
     Daemon.GameCenter, Daemon.ATWAKEUP, Daemon.Tips, Daemon.VPN,
     Daemon.ChineseLAN, Daemon.HealthKit, Daemon.AirPrint,
     Daemon.AssistiveTouch, Daemon.iCloud, Daemon.InternetTethering,
-    Daemon.PassBook, Daemon.Spotlight, Daemon.NanoTimeKit,
+    Daemon.PassBook, Daemon.Spotlight,
     Daemon.VoiceControl, Daemon.FollowUp, Daemon.Location,
     Daemon.News, Daemon.FamilySharing, Daemon.VideoSubscriptions,
-    Daemon.WebBookmarks, Daemon.AppleWatchNano,
+    Daemon.WebBookmarks,
     Daemon.WifiLogging, Daemon.Maps, Daemon.SafariSuggestions,
     Daemon.Reminders, Daemon.AirPlay, Daemon.GameKitService,
     Daemon.Sidecar, Daemon.SpeechRecognition,

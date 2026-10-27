@@ -17,3 +17,7 @@ class BackupStorageError(NuggetException):
 
 class BackupDiskSpaceError(NuggetException):
     """The computer's backup destination cannot satisfy a backup space check."""
+
+
+class PosterBoardBackupEncryptionError(NuggetException):
+    """The PosterBoard reader cannot extract encrypted backup payloads."""

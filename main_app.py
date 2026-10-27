@@ -225,7 +225,6 @@ def main() -> int:
     # show() (before app.exec()) can leave the parent unmapped/inactive,
     # which renders the dialog transparent, stuttering or unclickable.
     from PySide6.QtCore import QTimer
-    QTimer.singleShot(0, widget.run_first_launch_prompts)
 
     def prepare_control_pages():
         if widget.ios_tweaks.content._inner is None and not getattr(widget.ios_tweaks.content, "_building", False):
@@ -238,6 +237,8 @@ def main() -> int:
     app._startup_services = StartupServices(
         app, widget, dm, hotload, logger, _hotload_kill_or_none, _show_kill_message)
     app._startup_services.start()
+    if app._startup_services._required_update_dialog is None:
+        QTimer.singleShot(0, widget.run_first_launch_prompts)
 
     from src.tweaks.tweaks import tweaks, TweakID
     for arg in sys.argv:

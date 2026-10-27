@@ -289,7 +289,6 @@ class RestoreCacheThread(QThread):
             make_protective_working_copy, discard_protective_working_copy,
             clean_backup_for_restore,
             verify_backup_payloads,
-            find_latest_protective_backup,
         )
         from src.restore.restore import _restore_protective_backup
         from src.restore.afc_media import (
@@ -306,10 +305,13 @@ class RestoreCacheThread(QThread):
         # behind by an interrupted apply — after Phase 2 wiped the device that
         # directory is the only copy of the user's data, so the recovery path
         # has to be able to reach it.
-        base = self._find_cache_base(udid)
-        source_root = str(base / "master") if base is not None else None
-        if source_root is None:
-            source_root = find_latest_protective_backup(udid)
+        from src.restore.recovery_source import locate_restore_source
+        finder = getattr(self, '_find_cache_base', None)
+        base = finder(udid) if callable(finder) else None
+        if base is not None:
+            source_root = str(Path(base) / 'master')
+        else:
+            source_root, base = locate_restore_source(udid)
         if source_root is None:
             raise RuntimeError(
                 "No protective backup found for this device. Live backups are "
@@ -423,33 +425,6 @@ class RestoreCacheThread(QThread):
             return self.manager._get_backup_password()
         except Exception:
             return ""
-
-    def _find_cache_base(self, udid: str):
-        import tempfile
-        from pathlib import Path
-        from src.restore.storage import cache_base, is_custom_backup_dir
-        bases = []
-        try:
-            bases.append(Path(tempfile.gettempdir()) / "goldennugget_protective_cache")
-        except Exception:
-            pass
-        bases.append(cache_base())
-        if is_custom_backup_dir():
-            # A cache created under the previous default location may still
-            # exist there; read it so it can be migrated on the next refresh.
-            from PySide6.QtCore import QStandardPaths
-            try:
-                bases.append(Path(QStandardPaths.writableLocation(
-                    QStandardPaths.AppDataLocation)) / "GoldenNugget" / "backup_cache")
-            except Exception:
-                pass
-        for base in bases:
-            if (base / "master" / udid / "Manifest.db").is_file():
-                return base
-            if (base / f"{udid}.json").is_file():
-                return base
-        return None
-
 
 class CacheUpdateThread(QThread):
     """Force a refresh of the backup cache master (pre-apply "Update Cache").

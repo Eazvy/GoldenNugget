@@ -11,16 +11,18 @@ from src.gui.theme import ColorThemeManager, theme_icon
 
 # Pick once per process so rebuilding navigation keeps the launch's slogan.
 _LAUNCH_SLOGAN = random.choice((
-    "get bootlooped!",
-    "awesome!",
-    "shidahh nugget",
-    "iOS 27 is shit",
-    "Liquid Gl(ass)",
-    "so cool",
-    "Ashley look at me",
-    "golden slop",
-    "UI revamp by @oma!",
-    "icon artwork by mekabrine",
+    "works on my device",
+    "posterboard my beloved",
+    "trust the process",
+    "sparse restore enjoyer",
+    "certified nugget moment",
+    "Phase 5 speedrun",
+    "no refunds!",
+    "free at point of use",
+    "MBErrorDomain 205 club",
+    "tested on one device",
+    "siri, don't testify",
+    "hi",
 ))
 
 

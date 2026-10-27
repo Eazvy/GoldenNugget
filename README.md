@@ -2,7 +2,6 @@
 
 # GoldenNugget
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Offline tests](https://github.com/GoldenNugget-Team/GoldenNugget/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GoldenNugget-Team/GoldenNugget/actions/workflows/tests.yml)
 
 [Download](https://github.com/GoldenNugget-Team/GoldenNugget/releases/latest) · [Wiki](https://github.com/GoldenNugget-Team/GoldenNugget/wiki) · [Report a bug](https://github.com/GoldenNugget-Team/GoldenNugget/issues/new/choose) · [Discussions](https://github.com/GoldenNugget-Team/GoldenNugget/discussions)
 
@@ -286,18 +285,31 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [awesomenull] Lead developer
 - [Wind0ws11Aero] for helping with development a lot.
 - [kik4311] Co-developer
+- [mekabrine][mekabrineDiscord] for the logo and app icon artwork.
+- [Eazvy][EazvyGitHub] for interface improvements and the home feature artwork.
+- [Lucide contributors][LucideGitHub] for the interface icons.
+- [Rasmus Andersson][rsmsGitHub] for the Inter font.
 - Translations crowdsourced using [gNugget-i18n repository][i18n]
+- [Prognosticate-X] for [Status Bar research][sbr] on iOS 27
 - [LeminLimez] for creating Nugget.
 - [0xjonhnnydev] for [AirLift]
 - [LEGACY] Old translations were crowdsourced using [Nugget POEditor][POEditorJoin]. Thank you everyone who assisted in the translation effort!
 - [PosterRestore][PosterRestoreDiscord] for their help with PosterBoard
   - Special thanks to [dootskyre][dootskyreX], [Middo][MiddoX], [dulark][dularkGitHub], forcequitOS, and pingubow for their work on nugget. It would not have been possible without them!
-  - Thanks to [Snoolie for aar handling][python-aar-stuffGitHub]!
+  - Thanks to [Snoolie][SnoolieGitHub] for aar handling!
+- [SerStars][SerStarsGitHub] for the wallpaper website.
 - [iTechExpert][iTechExpertTwitter] for various Springboard/Internal Options
 - [Mikasa-san][Mikasa-sanGitHub] for [Quiet Daemon][QuietDaemonGitHub]
-- [pymobiledevice3][pymobiledevice3GitHub] for restoring and device algorithms.
-- [PySide6][PySide6Doc] for the GUI library.
+- [MiniVoidyy][MiniVoidyyGitHub] for the additional system and analytics daemon lists.
+- [doronz88][doronz88GitHub] for pymobiledevice3's restoring and device algorithms.
+- [Qt Company][QtGitHub] for the PySide6 GUI library.
+- [FFmpeg contributors][FFmpegGitHub] and [Karl Kroening][kkroeningGitHub] for video processing and the ffmpeg-python bindings.
+- [OpenCV contributors][OpenCVGitHub] for image and video decoding.
+- [pillow-heif contributors][pillowHeifGitHub] for HEIF image decoding on Linux.
+- [mattisklein][mattiskleinGitHub] for the Siri AI eligibility archives from Project Linwood.
 
+[Prognosticate-X]: https://github.com/Prognosticate-X/
+[sbr]: https://github.com/Prognosticate-X/ios27-carrier-lockscreen-research
 [caplayground]: https://caplayground.vercel.app/wallpapers
 [i18n]: https://github.com/awesomenull-dev/gNugget-i18n
 [NuggetLogo]: https://github.com/GoldenNugget-Team/GoldenNugget/blob/main/src/qt/credits/small_nugget.png
@@ -313,23 +325,32 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 [ReadMoreGist]: https://gist.github.com/leminlimez/c602c067349140fe979410ef69d39c28
 [Wind0ws11Aero]: https://github.com/Wind0ws11Aero
 [POEditorJoin]: https://poeditor.com/join/project/UTqpVSE2UD
-[JJTechGitHub]: https://github.com/JJTech0130
-[TrollStoreGitHub]: https://github.com/JJTech0130/TrollRestore
 [PosterRestoreDiscord]: https://discord.gg/gWtzTVhMvh
 [dootskyreX]: https://x.com/dootskyre
 [MiddoX]: https://x.com/MWRevamped
 [dularkGitHub]: https://github.com/dularkian
 [SerStarsX]: https://x.com/SerStars_lol
-[disfordottieX]: https://x.com/disfordottie
 [Mikasa-sanGitHub]: https://github.com/Mikasa-san
 [QuietDaemonGitHub]: https://github.com/Mikasa-san/QuietDaemon
-[sneakyf1shyGitHub]: https://github.com/f1shy-dev
+[MiniVoidyyGitHub]: https://github.com/MiniVoidyy
+[doronz88GitHub]: https://github.com/doronz88
+[QtGitHub]: https://github.com/qt
+[mekabrineDiscord]: https://discord.com/users/1196529222617923660
+[EazvyGitHub]: https://github.com/Eazvy
+[LucideGitHub]: https://github.com/lucide-icons
+[rsmsGitHub]: https://github.com/rsms
+[SerStarsGitHub]: https://github.com/SerStars
+[FFmpegGitHub]: https://github.com/FFmpeg
+[kkroeningGitHub]: https://github.com/kkroening
+[OpenCVGitHub]: https://github.com/opencv
+[pillowHeifGitHub]: https://github.com/bigcat88
+[SnoolieGitHub]: https://github.com/0xilis
 [lrdsnowGitHub]: https://github.com/Lrdsnow
 [EUEnablerGitHub]: https://github.com/Lrdsnow/EUEnabler
 [pymobiledevice3GitHub]: https://github.com/doronz88/pymobiledevice3
 [PySide6Doc]: https://doc.qt.io/qtforpython-6/
 [python-aar-stuffGitHub]: https://github.com/0xilis/python-aar-stuff
-[AIEligibilityGist]: https://gist.github.com/f1shy-dev/23b4a78dc283edd30ae2b2e6429129b5
+[mattiskleinGitHub]: https://github.com/mattisklein
 [bl_sbxGitHub]: https://github.com/khanhduytran0/bl_sbx/tree/main
 [DuyGitHub]: https://github.com/khanhduytran0
 [HuyTwitter]: https://x.com/Little_34306

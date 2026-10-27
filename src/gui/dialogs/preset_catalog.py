@@ -601,7 +601,7 @@ def browse_catalog_flow(parent, pm, window=None):
 
 
 def refresh_template_list(window):
-    page = getattr(window, "ios_posterboard", None)
+    page = getattr(window, "ios_templates", None)
     if page is not None and hasattr(page, "_load_templates_list"):
         page._load_templates_list()
 

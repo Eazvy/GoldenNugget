@@ -28,6 +28,7 @@ from src.restore.storage import cache_base as _cache_base
 
 _logger = logging.getLogger("GoldenNugget.cache")
 
+CACHE_FILTER_REVISION = 7
 
 
 def peek_cache_info(udid: str) -> Optional[dict]:
@@ -63,8 +64,7 @@ def peek_cache_info(udid: str) -> Optional[dict]:
 # master is the sole copy of user data between Phase 2 (wipe) and Phase 3
 # (restore), and a reboot would destroy it.
 CACHE_PERSIST_MIN_GB = float(os.environ.get("GOLDENNUGGET_CACHE_PERSIST_MIN_GB", "1"))
-# A cache younger than this is reused without touching the device at all;
-# past it, an incremental refresh session keeps the master in sync.
+# Legacy compatibility constant; apply/reset no longer uses an age-based bypass.
 CACHE_REFRESH_SECS = int(os.environ.get("GOLDENNUGGET_CACHE_REFRESH_SECS", "1800"))
 # The AFC photo store has its own lifetime: photos change far less often
 # than the rest of the protective scope, and re-pulling the whole media tree
@@ -127,6 +127,8 @@ class ProtectiveBackupCache:
             except Exception:
                 continue
             if info.get("udid") != self.udid or info.get("product_version") != self.product_version:
+                continue
+            if info.get('filter_revision') != CACHE_FILTER_REVISION:
                 continue
             if bool(info.get("encrypted", False)) != self.encrypted:
                 continue
@@ -223,6 +225,7 @@ class ProtectiveBackupCache:
         media_ts = now if include_afc_media else self._last_media_ts()
         with open(self.info_path, "w", encoding="utf-8") as f:
             json.dump({"udid": self.udid,
+                       "filter_revision": CACHE_FILTER_REVISION,
                        "product_version": self.product_version,
                        "encrypted": is_encrypted,
                        "media_afc": include_afc_media,

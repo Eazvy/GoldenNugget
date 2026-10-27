@@ -24,9 +24,21 @@ from src.restore.protective import (
     ProtectiveBackupService, backup_disk_space_message, check_disk_space,
 )
 from src.restore.storage import posterboard_dir as _posterboard_dir
-from src.exceptions.nugget_exception import BackupDiskSpaceError, NuggetException
+from src.exceptions.nugget_exception import BackupDiskSpaceError, NuggetException, PosterBoardBackupEncryptionError
+from src.gui.logger import get_logger
 from src.devicemanagement.constants import is_supported_by_fork
 from src.utils.async_retry import async_retry
+
+_log = get_logger('posterboard_backup')
+
+
+async def _require_readable_backup(backup_client):
+    if await backup_client.get_will_encrypt():
+        raise PosterBoardBackupEncryptionError(
+            'PosterBoard extraction cannot read encrypted backup manifests and payloads in this build. '
+            'No separate backup was started. Repeating the backup will not fix this. '
+            'Keep backup encryption enabled if you rely on it for protected data; '
+            'leave PosterBoard changes out of this apply until encrypted extraction is supported.')
 
 
 @contextmanager
@@ -82,6 +94,8 @@ async def targeted_posterboard_database_backup(udid: str, update_label=lambda x:
     max_retries = 3
 
     def _on_retry(attempt: int, total: int, e: Exception, delay: float) -> None:
+        _log.warning('PosterBoard database attempt %s/%s failed: %s: %s',
+                     attempt, total, type(e).__name__, e, exc_info=(type(e), e, e.__traceback__))
         if attempt < total:
             if isinstance(e, IncompletePosterBoardSnapshot):
                 update_label(QCoreApplication.tr(
@@ -101,6 +115,7 @@ async def targeted_posterboard_database_backup(udid: str, update_label=lambda x:
                         "GoldenNugget only supports iOS 26.2 and newer. "
                         "Please use the original Nugget for iOS 26.1 and earlier.")
                 async with ProtectiveBackupService(service_provider, include_posterboard=True) as backup_client:
+                    await _require_readable_backup(backup_client)
                     def _pb_only(backup_file):
                         device_name = backup_file.device_name or ""
                         return (_domain_match(device_name, POSTERBOARD_DB_DOMAIN)
@@ -189,6 +204,8 @@ async def pull_posterboard_container(udid: str, out_dir: str,
     max_retries = 3
 
     def _on_retry(attempt: int, total: int, e: Exception, delay: float) -> None:
+        _log.warning('PosterBoard container attempt %s/%s failed: %s: %s',
+                     attempt, total, type(e).__name__, e, exc_info=(type(e), e, e.__traceback__))
         if attempt < total and isinstance(e, IncompletePosterBoardSnapshot):
             update_label(QCoreApplication.tr(
                 "PosterBoard database copy was incomplete, retrying in {0}s... "
@@ -207,6 +224,7 @@ async def pull_posterboard_container(udid: str, out_dir: str,
                         "GoldenNugget only supports iOS 26.2 and newer. "
                         "Please use the original Nugget for iOS 26.1 and earlier.")
                 async with ProtectiveBackupService(service_provider, include_posterboard=True) as backup_client:
+                    await _require_readable_backup(backup_client)
                     def _pb_only(backup_file):
                         device_name = backup_file.device_name or ""
                         # iOS 26 uploads the container as AppDomain-*; iOS 27
