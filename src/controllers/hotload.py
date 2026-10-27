@@ -22,7 +22,7 @@ from PySide6.QtCore import QCoreApplication, QStandardPaths
 from src.version import App_Version as _APP_VERSION
 from src.tweaks.registry import SPECS_BY_SECTION, SECTION_FEATURES
 
-RULES_URL = ("https://raw.githubusercontent.com/awesomenull-dev/"
+RULES_URL = ("https://raw.githubusercontent.com/GoldenNugget-Team/"
              "GoldenNugget/main/hotload_rules.json")
 RULES_FILENAME = "hotload_rules.json"
 KILL_SWITCH_KEY = "hotload_enabled"
