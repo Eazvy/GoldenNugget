@@ -1114,14 +1114,6 @@ SPECS: tuple[TweakSpec, ...] = (
        warning='Reader, shared UIKit suite and integer -1 are user-reported for iOS 27.0, not independently verified here. Retail restore delivery and visible effects are unverified. May worsen scrolling or loading; battery and performance gains are not established. Disabling omits future writes and does not remove an applied override.'),
 )
 
-from .local_catalog import SPECS as LOCAL_SPECS
-_existing_ids={spec.id for spec in SPECS}
-SPECS=SPECS+tuple(spec for spec in LOCAL_SPECS if spec.id not in _existing_ids)
-LOCAL_ONLY_IDS=frozenset(spec.id for spec in SPECS if spec.id not in _existing_ids)
-
-SPECS_BY_SECTION = {section: [s for s in SPECS if s.section == section and not s.disabled] for section in Section}
-SPECS_BY_ID = {spec.id: spec for spec in SPECS if not spec.disabled}
-
 
 MANAGED_PREF_PREFIX = "/var/Managed Preferences/"
 HOME_PREFIX = "/var/mobile/"
@@ -1164,3 +1156,13 @@ def managed_pref_app_plists() -> frozenset:
         if target is not None:
             out.add(target)
     return frozenset(out)
+LOCAL_ONLY_IDS: frozenset = frozenset()
+
+SPECS_BY_SECTION: dict[Section, list[TweakSpec]] = {
+    section: [s for s in SPECS if s.section == section and not s.disabled]
+    for section in Section
+}
+
+SPECS_BY_ID: dict[TweakID, TweakSpec] = {
+    spec.id: spec for spec in SPECS if not spec.disabled
+}
