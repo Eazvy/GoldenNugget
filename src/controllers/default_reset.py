@@ -32,10 +32,6 @@ def remaining_reset_entries(entries, pages):
 
 
 def preference_reset_plan(entries, pages):
-    if entries is None:
-        if Page.Daemons in pages or any(page in PAGE_SECTIONS for page in pages):
-            raise ValueError('No applied-selection record is available for this device and iOS version.')
-        return {}
     selected = {PAGE_SECTIONS[page] for page in pages if page in PAGE_SECTIONS}
     paths = defaultdict(set)
     specs = {spec.id.name: spec for spec in SPECS}
