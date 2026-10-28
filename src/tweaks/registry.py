@@ -981,7 +981,7 @@ SPECS: tuple[TweakSpec, ...] = (
        FileLocation.footnote, "LockScreenFootnote", value="", kind=Kind.TEXT,
        description='Adds a short message to the Lock Screen.'),
     _t(TweakID.WatchOSCompatibility, Section.SPRINGBOARD, 'Relax Apple Watch Version Check',
-       FileLocation.nanoregistry, "", factory=_watchos_compatibility, ipad_only=True,
+       FileLocation.nanoregistry, "", factory=_watchos_compatibility, ipad_only=False,
        description='Pair an Apple Watch running a different watchOS version.'),
     _t(TweakID.AirDropDisableTimeLimit, Section.SPRINGBOARD, 'Keep AirDrop Open to Everyone',
        FileLocation.airdrop, "OverrideTimeLimitEveryoneMode",
