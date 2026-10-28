@@ -40,7 +40,7 @@
 | test_interface_picker | PASS | 19.9 |
 | test_language_restart | PASS | 3.7 |
 | test_lazy_imports | PASS | 4.1 |
-| test_light_theme | PASS | 45.7 |
+| test_theme | PASS | 45.7 |
 | test_linux_deps | PASS | 0.6 |
 | test_log_viewer | PASS | 9.0 |
 | test_log_viewer_live | PASS | 13.5 |

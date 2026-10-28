@@ -33,6 +33,26 @@ class ContributorCredit(QWidget):
         """)
 
 
+class _ProfileCard(IOSCard):
+    """A developer tile drawn with the same liquid-glass treatment as the home tiles.
+
+    The glass (translucent fill, sheen, rim and pointer reflection) comes from
+    ``LiquidCard.paintEvent``; the tile is never painted by a stylesheet, so the
+    ``supportProfile`` rule only keeps the surface transparent.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('supportProfile')
+        self.setProperty('liquidHomeCard', True)
+        self.setMouseTracking(True)
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if not self._scroll_active():
+            self.shift(1.0)
+
+
 class SupportPanel(IOSCard):
     def __init__(self, parent=None, links=None):
         super().__init__(parent)
@@ -103,8 +123,7 @@ class SupportPanel(IOSCard):
         self._load_translation_contributors(True)
 
     def _profile(self, role, name, url, portrait):
-        tile = QWidget()
-        tile.setObjectName('supportProfile')
+        tile = _ProfileCard()
         tile.setMinimumHeight(188)
         column = QVBoxLayout(tile)
         column.setContentsMargins(16, 18, 16, 16)

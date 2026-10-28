@@ -54,7 +54,7 @@ def run_suite(script, log_path, timeout):
 def main(argv=None):
     scripts = {path.stem: path for path in sorted((ROOT / "tools").glob("test_*.py"))}
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tests", nargs="*", help="Optional test names, e.g. test_light_theme")
+    parser.add_argument("tests", nargs="*", help="Optional test names, e.g. test_theme")
     parser.add_argument("--list", action="store_true", help="List available suites without running them")
     parser.add_argument("--timeout", type=int, default=120, help="Seconds allowed per suite (default: 120)")
     parser.add_argument("--report-dir", type=Path, default=ROOT / "test-results")

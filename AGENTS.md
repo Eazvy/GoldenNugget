@@ -6,32 +6,30 @@ This document describes the background threads, async backup/restore operations,
 
 ## Color Theme System (src/gui/theme/)
 
-**Dark and light modes are explicit user choices, independent of the accent.**
+**The app has one dark palette; only the accent is a user choice.**
 
-- `colors.py` — frozen dataclass `ThemeColors` and two palettes,
-  **`DARK` / `LIGHT`** (named slots: `bg_primary`, `bg_secondary`, `bg_tertiary`,
+- `colors.py` — frozen dataclass `ThemeColors` and the single palette
+  **`DARK`** (named slots: `bg_primary`, `bg_secondary`, `bg_tertiary`,
   `bg_input`, `bg_elevated`, `text_primary`, `text_secondary`, `accent`,
   `divider`, `error`, `success`, `warning`, `border`, `scrollbar`,
-  `surface_hover`, `danger_text`, ...). `ACCENT_PRESETS` holds 8 dark-mode
-  accent choices (blue/purple/pink/red/orange/yellow/green/teal).
-  `LIGHT_ACCENT_PRESETS` provides the same hues with sufficient contrast for
-  links and white button text on light surfaces. Keep the two sets in sync.
+  `surface_hover`, `danger_text`, ...). `ACCENT_PRESETS` holds the 8 accent
+  choices (blue/purple/pink/red/orange/yellow/green/teal). There is no light
+  palette and no `color_mode` setting any more.
 - `theme_manager.py` — `ColorThemeManager` singleton (`instance()`):
-  `colors` (the active `ThemeColors`), `set_mode("dark"|"light")`,
-  `set_accent(name)`, `c(slot)` (color
-  accessor), `build_palette()` (QPalette for native widgets), `accent_hex()`,
-  `accent_rgb()`. Persisted via QSettings (`color_mode`, `accent_color`). Emits
-  `theme_changed` (no payload) on any color change.
-- `mode` / `is_dark` reflect real persisted state; dark remains the default.
-  `accent_name` is the stable user choice, while `accent_hex()` / `accent_rgb()`
-  return its current mode's actual color. Native QPalette roles are applied
-  for active, inactive and disabled widgets on every change.
+  `colors` (the `ThemeColors`), `set_accent(name)`, `set_custom_accent(value)`,
+  `c(slot)` (color accessor), `build_palette()` (QPalette for native widgets),
+  `accent_hex()`, `accent_rgb()`. Persisted via QSettings (`accent_color`,
+  `liquid/custom_accent`). Emits `theme_changed` (no payload) on any color
+  change.
+- `accent_name` is the stable user choice; `accent_hex()` / `accent_rgb()`
+  return its actual color. Native QPalette roles are applied for active,
+  inactive and disabled widgets on every change.
 - The app does not follow the OS theme. `set_system_theme()` and
   `apply_system_theme()` do not exist. `apply_to_app()` instead PINS Qt's
-  colour scheme to the saved mode (`QStyleHints.setColorScheme`, Qt 6.8+) so
-  native title bars and system dialogs never switch with the OS, and its
-  `colorSchemeChanged` handler only re-asserts the saved mode (only the live
-  singleton answers). Always go through `apply_to_app()`, never a bare
+  colour scheme to dark (`QStyleHints.setColorScheme`, Qt 6.8+) so native title
+  bars and system dialogs never switch with the OS, and its
+  `colorSchemeChanged` handler only re-asserts dark (only the live singleton
+  answers). Always go through `apply_to_app()`, never a bare
   `app.setPalette(...)`.
 - `styles.py` — `STYLES` dict of Qt stylesheet templates using `{slot}` named
   placeholders (literal braces are doubled `{{`/`}}`).
@@ -132,14 +130,11 @@ This document describes the background threads, async backup/restore operations,
 - Old `src/gui/ios/theme_manager.py` (`CLASSIC`/`IOS`) is layout-only
   (Classic vs iOS-style chrome) and stays untouched side-by-side.
 - Theme UI lives in Settings → **Appearance** (`src/gui/ios/settings.py`):
-  "Accent Color" selects the accent via `set_accent(...)`. The light/dark
-  selector was removed from the page. **TEMP:** `LIGHT_MODE_AVAILABLE = False`
-  in `theme_manager.py` makes every start dark (a saved `color_mode` is kept but
-  ignored), so nobody stays stuck in light mode without a switch. Set it to
-  True when the selector comes back.
+  "Accent Color" selects the accent via `set_accent(...)`. There is no
+  light/dark selector and no light palette at all.
 - The app does **not** follow the OS colour scheme: `main_app.py` calls
-  `ColorThemeManager.apply_to_app(app)`, which applies the persisted palette and
-  pins the Qt colour scheme to it; mode/accent changes re-run it.
+  `ColorThemeManager.apply_to_app(app)`, which applies the dark palette and
+  pins the Qt colour scheme to dark; accent changes re-run it.
 
 ## HotLoad Safety Rules (src/controllers/hotload.py)
 

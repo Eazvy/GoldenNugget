@@ -464,17 +464,17 @@ the `ProtectiveBackupCache` to `protective_cache.py` (both re-exported from
 
 ## src/gui/ — two UIs, one state
 
-Application color themes live separately in `gui/theme/`: `DARK` and `LIGHT`
-share named slots, with eight accent choices tuned independently for contrast
-in each mode. `ColorThemeManager.set_mode()` saves `color_mode` in QSettings;
-dark is the default and the OS color scheme is not followed. The Settings
-page no longer exposes a light/dark selector; the stored mode is still applied
-at startup and `set_mode()` can update the palette live.
+Application colors live separately in `gui/theme/`: a single dark palette
+(`DARK`) provides named slots and eight accent choices (`ACCENT_PRESETS`) that
+swap `accent`/`accent_hover`/`accent_pressed` only.
+`ColorThemeManager.set_accent()` saves `accent_color` in QSettings; there is no
+light/dark switch and the OS color scheme is not followed (Qt's colour scheme is
+pinned dark).
 Native widget palettes cover active, inactive and disabled states, while
 pages, shared components and open dialogs reapply their themed styles.
 Color-only labels must explicitly use a transparent background so their
 palette window color cannot obscure card surfaces. Offline theme regressions
-are in `tools/test_light_theme.py`.
+are in `tools/test_theme.py`.
 
 The pre-apply summary includes **View changes**, a read-only, scrollable
 selection comparison (`controllers/apply_preview.py`,

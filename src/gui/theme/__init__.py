@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt, QSize, QRect, QRectF
 from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap, QBitmap, QRegion
 
 from src.gui.theme.theme_manager import ColorThemeManager
-from src.gui.theme.colors import DARK, LIGHT, ACCENT_PRESETS, LIGHT_ACCENT_PRESETS
+from src.gui.theme.colors import DARK, ACCENT_PRESETS
 from src.gui.theme.styles import STYLES, FONT_FAMILY
 from src.gui.theme.accent_picker import AccentPicker
 

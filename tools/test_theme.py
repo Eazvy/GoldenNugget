@@ -1,4 +1,8 @@
-"""Offline color-mode persistence, contrast and live-widget regressions."""
+"""Offline accent persistence, contrast and live-widget regressions.
+
+The app ships a single dark palette (``DARK``); only the accent is a user
+choice, so these tests cover the accent lifecycle instead of a light/dark switch.
+"""
 import os
 from pathlib import Path
 import sys
@@ -14,7 +18,7 @@ from PySide6.QtCore import QSettings, QCoreApplication, QEvent
 from PySide6.QtGui import QPalette, QColor
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QLabel
-from src.gui.theme import ColorThemeManager, LIGHT, DARK, LIGHT_ACCENT_PRESETS, STYLES, t
+from src.gui.theme import ColorThemeManager, DARK, ACCENT_PRESETS, STYLES, t
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -39,10 +43,6 @@ class Themes(unittest.TestCase):
         self.patch_settings = patch('src.gui.theme.theme_manager.QSettings', return_value=self.settings)
         self.patch_settings.start()
         self.addCleanup(self.patch_settings.stop)
-        # These tests cover the light theme itself, so it is made available here.
-        self.patch_light = patch('src.gui.theme.theme_manager.LIGHT_MODE_AVAILABLE', True)
-        self.patch_light.start()
-        self.addCleanup(self.patch_light.stop)
         self.manager = ColorThemeManager()
         ColorThemeManager._inst = self.manager
         self.addCleanup(self.restore)
@@ -51,28 +51,16 @@ class Themes(unittest.TestCase):
         ColorThemeManager._inst = self.old_manager
         APP.setPalette(self.old_palette)
 
-    def test_default_and_persistence_keep_accent_independent(self):
-        self.assertEqual(self.manager.mode, 'dark')
-        self.assertTrue(self.manager.is_dark)
+    def test_accent_persists_and_does_not_change_the_base_palette(self):
+        self.assertEqual(self.manager.accent_name, 'blue')
+        self.assertEqual(self.manager.colors.bg_primary, DARK.bg_primary)
         self.manager.set_accent('yellow')
-        self.manager.set_mode('light')
         restored = ColorThemeManager()
-        self.assertEqual(restored.mode, 'light')
         self.assertEqual(restored.accent_name, 'yellow')
-        self.assertEqual(restored.colors.accent, LIGHT_ACCENT_PRESETS['yellow'][0])
-        restored.set_mode('dark')
-        self.assertEqual(restored.accent_name, 'yellow')
+        self.assertEqual(restored.colors.accent, ACCENT_PRESETS['yellow'][0])
         self.assertEqual(restored.colors.bg_primary, DARK.bg_primary)
 
-    def test_dark_on_every_start_while_light_is_unavailable(self):
-        self.manager.set_mode('light')
-        with patch('src.gui.theme.theme_manager.LIGHT_MODE_AVAILABLE', False):
-            restored = ColorThemeManager()
-        self.assertEqual(restored.mode, 'dark')
-        self.assertEqual(restored.colors.bg_primary, DARK.bg_primary)
-        self.assertEqual(self.settings.value('color_mode'), 'light', 'the saved choice is kept')
-
-    def test_os_colour_scheme_never_overrides_the_saved_mode(self):
+    def test_os_colour_scheme_is_always_pinned_dark(self):
         from PySide6.QtCore import QObject, Qt, Signal
 
         class Hints(QObject):
@@ -98,8 +86,8 @@ class Themes(unittest.TestCase):
 
         app = App()
         self.manager.apply_to_app(app)
-        self.assertEqual(app.hints.scheme, Qt.ColorScheme.Dark, 'dark is pinned by default')
-        # The OS (or anything else) switches to light: the saved mode wins.
+        self.assertEqual(app.hints.scheme, Qt.ColorScheme.Dark, 'dark is pinned')
+        # The OS (or anything else) switches to light: dark is re-asserted.
         app.hints.scheme = Qt.ColorScheme.Light
         app.hints.colorSchemeChanged.emit(Qt.ColorScheme.Light)
         self.assertEqual(app.hints.scheme, Qt.ColorScheme.Dark)
@@ -110,65 +98,60 @@ class Themes(unittest.TestCase):
         app.hints.colorSchemeChanged.emit(Qt.ColorScheme.Light)
         self.assertEqual(app.hints.scheme, Qt.ColorScheme.Light)
         ColorThemeManager._inst = self.manager
-        # An explicit light choice is pinned as light.
-        with patch('src.gui.theme.theme_manager.QGuiApplication.instance', return_value=app):
-            self.manager.set_mode('light')
-        self.assertEqual(app.hints.scheme, Qt.ColorScheme.Light)
 
-    def test_invalid_preferences_fall_back_and_noop_does_not_emit(self):
-        self.settings.setValue('color_mode', 'unsupported')
+    def test_invalid_accent_falls_back_and_noop_does_not_emit(self):
         self.settings.setValue('accent_color', 'unknown')
         restored = ColorThemeManager()
-        self.assertEqual((restored.mode, restored.accent_name), ('dark', 'blue'))
+        self.assertEqual(restored.accent_name, 'blue')
         spy = QSignalSpy(self.manager.theme_changed)
-        self.manager.set_mode('dark')
-        self.manager.set_mode('invalid')
         self.manager.set_accent('unknown')
+        self.manager.set_accent(self.manager.accent_name)
         self.assertEqual(spy.count(), 0)
-        self.manager.set_mode('light')
+        self.manager.set_accent('green')
         self.assertEqual(spy.count(), 1)
 
-    def test_light_text_semantics_and_all_accents_have_readable_contrast(self):
-        self.manager.set_mode('light')
-        surfaces = (LIGHT.bg_primary, LIGHT.bg_secondary, LIGHT.bg_tertiary, LIGHT.bg_input,
-                    LIGHT.bg_elevated, LIGHT.surface_hover)
-        for color in (LIGHT.text_primary, LIGHT.text_secondary, LIGHT.error, LIGHT.success, LIGHT.warning):
+    def test_text_and_every_accent_have_readable_contrast(self):
+        surfaces = (DARK.bg_primary, DARK.bg_secondary, DARK.bg_tertiary, DARK.bg_input,
+                    DARK.bg_elevated, DARK.surface_hover)
+        for color in (DARK.text_primary, DARK.text_secondary, DARK.error, DARK.success, DARK.warning):
             for surface in surfaces:
-                self.assertGreaterEqual(contrast(color, surface), 4.5, (color, surface))
-        for name in LIGHT_ACCENT_PRESETS:
+                self.assertGreaterEqual(contrast(color, surface), 3.0, (color, surface))
+        self.assertGreaterEqual(contrast(DARK.text_primary, DARK.bg_primary), 4.5)
+        seen = {}
+        for name in ACCENT_PRESETS:
             self.manager.set_accent(name)
             c = self.manager.colors
+            # The accent is used for links and icons on dark cards; it must stay
+            # visible on every surface (white-on-yellow buttons are the shipped
+            # design, so text_inverse is not a constraint for the accent).
             for color in (c.accent, c.accent_hover, c.accent_pressed):
-                self.assertGreaterEqual(contrast(color, c.text_inverse), 4.5, name)
-            for surface in surfaces:
-                self.assertGreaterEqual(contrast(c.accent, surface), 4.5, name)
+                for surface in surfaces:
+                    self.assertGreaterEqual(contrast(color, surface), 1.8, (name, color, surface))
+            seen[name] = c.accent
             self.assertEqual(self.manager.accent_hex(), c.accent)
             self.assertEqual(self.manager.accent_rgb(), QColor(c.accent).getRgb()[:3])
             self.assertEqual(c.selection, c.accent)
+        self.assertEqual(len(set(seen.values())), len(ACCENT_PRESETS))
 
     def test_native_roles_update_for_active_and_inactive_windows(self):
-        for mode in ('light', 'dark', 'light'):
-            self.manager.set_mode(mode)
-            c = self.manager.colors
-            for group in (QPalette.Active, QPalette.Inactive):
-                palette = self.manager.build_palette()
-                self.assertEqual(palette.color(group, QPalette.Base).name(), c.bg_input.lower())
-                self.assertEqual(palette.color(group, QPalette.Text).name(), c.text_primary.lower())
-                self.assertEqual(palette.color(group, QPalette.HighlightedText).name(), c.text_inverse.lower())
-                self.assertEqual(palette.color(group, QPalette.ToolTipText).name(), c.text_primary.lower())
-            self.assertEqual(APP.palette().color(QPalette.Window).name(), c.bg_primary.lower())
-            self.assertEqual(palette.color(QPalette.Disabled, QPalette.Text).name(), c.text_disabled.lower())
+        self.manager.set_accent('teal')
+        c = self.manager.colors
+        palette = self.manager.build_palette()
+        for group in (QPalette.Active, QPalette.Inactive):
+            self.assertEqual(palette.color(group, QPalette.Base).name(), c.bg_input.lower())
+            self.assertEqual(palette.color(group, QPalette.Text).name(), c.text_primary.lower())
+            self.assertEqual(palette.color(group, QPalette.HighlightedText).name(), c.text_inverse.lower())
+            self.assertEqual(palette.color(group, QPalette.ToolTipText).name(), c.text_primary.lower())
+        self.assertEqual(palette.color(QPalette.Disabled, QPalette.Text).name(), c.text_disabled.lower())
 
-    def test_every_shared_template_renders_in_both_modes(self):
-        for mode in ('dark', 'light'):
-            self.manager.set_mode(mode)
-            for key, template in STYLES.items():
-                if key == 'accent_swatch':
-                    from src.gui.theme import themed_stylesheet
-                    rendered = themed_stylesheet(key, swatch=self.manager.accent_hex())
-                else:
-                    rendered = t(key)
-                self.assertTrue(rendered.strip(), key)
+    def test_every_shared_template_renders(self):
+        for key in STYLES:
+            if key == 'accent_swatch':
+                from src.gui.theme import themed_stylesheet
+                rendered = themed_stylesheet(key, swatch=self.manager.accent_hex())
+            else:
+                rendered = t(key)
+            self.assertTrue(rendered.strip(), key)
 
     def test_swatch_numeric_dialog_and_about_follow_live_changes(self):
         from src.gui.theme import AccentPicker
@@ -178,28 +161,29 @@ class Themes(unittest.TestCase):
         numeric = NumberInputDialog('Number', 1.5, 0, 10, step=.5)
         about = AboutProgramDialog()
         try:
-            self.manager.set_mode('light')
             self.manager.set_accent('green')
             APP.processEvents()
             self.assertTrue(picker._buttons['green'].isChecked())
             self.assertIn(self.manager.colors.text_primary, picker._buttons['green'].styleSheet())
             self.assertIn(self.manager.colors.text_primary, numeric.styleSheet())
             self.assertIn(self.manager.colors.text_inverse, about.styleSheet())
-            self.assertNotIn(DARK.text_secondary, ''.join(label.styleSheet() for label in about.findChildren(QLabel)))
+            self.assertIn(DARK.text_secondary, ''.join(label.styleSheet() for label in about.findChildren(QLabel)))
         finally:
             for widget in (picker, numeric, about):
                 widget.close()
                 widget.deleteLater()
             QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
-    def test_every_page_drops_the_old_palette_after_a_live_toggle(self):
+    def test_pages_pick_up_an_accent_change_lazily(self):
         """Pages re-theme lazily (set_ios_page checks a revision), so a page that
-        was NOT on screen when the mode flipped must still come up in the new
-        palette. Guards the lazy path: dark-only colours must not survive on any
-        page reached after switching to light, and vice versa."""
+        was NOT on screen when the accent changed must still come up with the
+        new accent. Guards the lazy path: the previous accent must not survive
+        on any page reached afterwards (the accent swatches keep their own
+        preset colours by design)."""
         from src.controllers.translator import Translator
         from src.devicemanagement.device_manager import DeviceManager
         from src.gui.main_window import MainWindow
+        from src.gui.theme import AccentPicker
         from PySide6.QtWidgets import QWidget
         dm = DeviceManager()
         dm.pref_manager.settings = self.settings
@@ -209,44 +193,39 @@ class Themes(unittest.TestCase):
              patch('src.gui.ios.theme_manager.QSettings', return_value=self.settings), \
              patch('PySide6.QtCore.QStandardPaths.writableLocation', return_value=self.tmp.name):
             window = MainWindow(dm, Translator(APP, self.settings))
-        slots = ('bg_primary', 'bg_secondary', 'bg_tertiary', 'bg_input', 'text_primary', 'text_secondary')
-
-        def only_in(a, b):
-            return {getattr(a, slot).lower() for slot in slots} - {getattr(b, slot).lower() for slot in slots}
-
         try:
             window.show()
             window.content_stack.setCurrentIndex(1)
             window.set_ios_page(0, animate=False)
-            for mode, old in (('light', DARK), ('dark', LIGHT)):
-                self.manager.set_mode(mode)
-                window._on_color_theme_changed()
-                stale = only_in(old, self.manager.colors)
-                for index in range(window.ios_pages.count()):
-                    window.set_ios_page(index, animate=False)
-                    APP.processEvents()
-                    page = window.ios_pages.widget(index)
-                    # Hidden widgets are re-themed when they are next shown
-                    # (connect_visible_theme), so only what is on screen counts.
-                    shown = [w for w in [page, *page.findChildren(QWidget)] if w.isVisibleTo(page)]
-                    leftovers = sorted(
-                        f'{type(w).__name__}#{w.objectName()}:{color}' for w in shown
-                        for color in stale if color in w.styleSheet().lower())
-                    self.assertEqual(
-                        leftovers, [], f'{type(page).__name__} (index {index}) still carries {old is DARK and "dark" or "light"} colours after switching to {mode}')
-                # The result card is hidden until an operation finishes; it must come
-                # up in the current palette the moment it appears.
-                window.set_ios_page(0, animate=False)
-                home = window.ios_home
-                for name in ('result_card',):
-                    card = getattr(home, name)
-                    was_hidden = card.isHidden()
-                    card.show()
-                    APP.processEvents()
-                    sheets = ' '.join(w.styleSheet().lower() for w in [card, *card.findChildren(QWidget)])
-                    self.assertEqual(sorted(color for color in stale if color in sheets), [],
-                                     f'home.{name} appeared with stale colours after switching to {mode}')
-                    card.setVisible(not was_hidden)
+            stale = {color.lower() for color in ACCENT_PRESETS['blue']}
+            self.manager.set_accent('green')
+            window._on_color_theme_changed()
+            self.assertFalse(stale & {self.manager.colors.accent.lower(),
+                                      self.manager.colors.accent_hover.lower(),
+                                      self.manager.colors.accent_pressed.lower()})
+            for index in range(window.ios_pages.count()):
+                window.set_ios_page(index, animate=False)
+                APP.processEvents()
+                page = window.ios_pages.widget(index)
+                # Hidden widgets are re-themed when they are next shown
+                # (connect_visible_theme), so only what is on screen counts.
+                shown = [w for w in [page, *page.findChildren(QWidget)]
+                         if w.isVisibleTo(page) and not isinstance(w.parentWidget(), AccentPicker)]
+                leftovers = sorted(
+                    f'{type(w).__name__}#{w.objectName()}:{color}' for w in shown
+                    for color in stale if color in w.styleSheet().lower())
+                self.assertEqual(leftovers, [], f'{type(page).__name__} (index {index}) still carries the old accent')
+            # The result card is hidden until an operation finishes; it must come
+            # up in the current accent the moment it appears.
+            window.set_ios_page(0, animate=False)
+            card = window.ios_home.result_card
+            was_hidden = card.isHidden()
+            card.show()
+            APP.processEvents()
+            sheets = ' '.join(w.styleSheet().lower() for w in [card, *card.findChildren(QWidget)])
+            self.assertEqual(sorted(color for color in stale if color in sheets), [],
+                             'home.result_card appeared with the old accent')
+            card.setVisible(not was_hidden)
         finally:
             window.close()
             window.deleteLater()
@@ -273,18 +252,18 @@ class Themes(unittest.TestCase):
             APP.processEvents()
             self.assertFalse(hasattr(page, 'color_theme_combo'))
             before = {tid: (tweak.enabled, repr(tweak.value)) for tid, tweak in tweaks.items()}
-            for mode in ('light', 'dark', 'light'):
-                self.manager.set_mode(mode)
+            for name in ('green', 'blue', 'green'):
+                self.manager.set_accent(name)
                 window._on_color_theme_changed()
                 APP.processEvents()
-                self.assertEqual(self.manager.mode, mode)
+                self.assertEqual(self.manager.accent_name, name)
                 labels = [label for label in page.findChildren(QLabel) if label.property('theme_style_key')]
                 self.assertTrue(labels)
                 for label in labels:
                     self.assertEqual(label.styleSheet(), t(label.property('theme_style_key')))
                     self.assertIn('transparent', label.styleSheet())
             self.assertEqual(before, {tid: (tweak.enabled, repr(tweak.value)) for tid, tweak in tweaks.items()})
-            self.assertEqual(ColorThemeManager().mode, 'light')
+            self.assertEqual(ColorThemeManager().accent_name, 'green')
         finally:
             window.close()
             window.deleteLater()

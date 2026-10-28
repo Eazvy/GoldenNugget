@@ -309,12 +309,12 @@ STYLES = {
     """,
 
     "support_panel": """
-            QLabel#supportTitle {{ color: {text_primary}; font-size: 19px; font-weight: 600; }}
-            QLabel#supportMuted {{ color: {text_secondary}; font-size: 12px; }}
-            QLabel#supportCredit {{ color: {text_primary}; font-size: 13px; }}
+            QLabel#supportTitle {{ color: {text_primary}; background: transparent; font-size: 19px; font-weight: 600; }}
+            QLabel#supportMuted {{ color: {text_secondary}; background: transparent; font-size: 12px; }}
+            QLabel#supportCredit {{ color: {text_primary}; background: transparent; font-size: 13px; }}
             QToolButton#supportLink {{ background: {bg_tertiary}; border: 1px solid {border}; border-radius: 14px; }}
             QToolButton#supportLink:hover {{ border-color: {accent}; background: {surface_hover}; }}
-            QWidget#supportProfile {{ background: {bg_secondary}; border: 1px solid {border}; border-radius: 18px; }}
+            QWidget#supportProfile {{ background: transparent; border: none; }}
             QToolButton#supportAvatar {{ background: transparent; border: none; padding: 2px; }}
             QPushButton#supportName {{ background: transparent; color: {text_primary}; font-size: 17px; font-weight: 600; border: none; padding: 5px; }}
             QPushButton#supportName:hover {{ color: {accent}; }}

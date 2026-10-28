@@ -9,7 +9,6 @@ CREDITS = [
     (QT_TRANSLATE_NOOP("SupportPanel", "Nugget Creator"), "leminlimez", "https://github.com/leminlimez"),
     (QT_TRANSLATE_NOOP("SupportPanel", "UI Designer"), "@omaw", "https://discord.com/users/1155026301791514655"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Icon Artwork"), "mekabrine", "https://discord.com/users/1196529222617923660"),
-    (QT_TRANSLATE_NOOP("SupportPanel", "Interface & Home Artwork"), "Eazvy", "https://github.com/Eazvy"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Interface Icons"), "Lucide contributors", "https://github.com/lucide-icons"),
     (QT_TRANSLATE_NOOP("SupportPanel", "Inter Font"), "Rasmus Andersson", "https://github.com/rsms"),
     (QT_TRANSLATE_NOOP("SupportPanel", "PosterRestore Team"), "PosterRestore Discord", "https://discord.com/invite/gWtzTVhMvh"),

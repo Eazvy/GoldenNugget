@@ -16,7 +16,7 @@ separate process with an offscreen Qt platform and temporary settings/storage,
 and writes per-suite logs plus `summary.md` to `test-results/`.
 
 Use `python tools/run_tests.py --list` to see the suites, or
-`python tools/run_tests.py test_light_theme test_posterboard_backup_space` to
+`python tools/run_tests.py test_theme test_posterboard_backup_space` to
 run specific suites. A failure or per-suite timeout makes the command fail.
 These are offline regressions; the device-testing requirements above still
 apply to changes that interact with a real device.

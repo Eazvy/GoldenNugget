@@ -46,9 +46,6 @@ class UIPolish(unittest.TestCase):
         with patch('src.gui.theme.theme_manager.QSettings', return_value=store):
             self.manager = ColorThemeManager()
         ColorThemeManager._inst = self.manager
-        light = patch('src.gui.theme.theme_manager.LIGHT_MODE_AVAILABLE', True)
-        light.start()
-        self.addCleanup(light.stop)
         self.page = SettingsHarness()
         self.addCleanup(self.page.deleteLater)
 
@@ -79,21 +76,21 @@ class UIPolish(unittest.TestCase):
 
     def test_organization_dialog_uses_shared_style_and_preserves_submit(self):
         submitted = []
-        for mode in ('dark', 'light'):
-            self.manager.set_mode(mode)
-            def accept(dialog):
-                self.assertEqual(dialog.styleSheet(), t('text_input_dialog'))
-                self.assertEqual(dialog.textValue(), 'Original')
-                self.assertIn(self.manager.colors.text_inverse, dialog.styleSheet())
-                dialog.setTextValue('Edited')
-                return QDialog.Accepted
-            with patch.object(settings_module.QInputDialog, 'exec', accept):
-                self.page._on_text_row_edit('Organization', submitted.append)
-            self.assertEqual(self.page.org_value_lbl.text(), 'Edited')
-        self.assertEqual(submitted, ['Edited', 'Edited'])
+
+        def accept(dialog):
+            self.assertEqual(dialog.styleSheet(), t('text_input_dialog'))
+            self.assertEqual(dialog.textValue(), 'Original')
+            self.assertIn(self.manager.colors.text_inverse, dialog.styleSheet())
+            dialog.setTextValue('Edited')
+            return QDialog.Accepted
+
+        with patch.object(settings_module.QInputDialog, 'exec', accept):
+            self.page._on_text_row_edit('Organization', submitted.append)
+        self.assertEqual(self.page.org_value_lbl.text(), 'Edited')
+        self.assertEqual(submitted, ['Edited'])
         with patch.object(settings_module.QInputDialog, 'exec', return_value=QDialog.Rejected):
             self.page._on_text_row_edit('Organization', submitted.append)
-        self.assertEqual(len(submitted), 2)
+        self.assertEqual(len(submitted), 1)
 
     def test_history_search_shared_control_filter_and_clear(self):
         entries = [dict(timestamp='2026-10-27T12:00:00', mode='apply',
@@ -113,10 +110,8 @@ class UIPolish(unittest.TestCase):
             field._clear_button.click()
             self.assertEqual(field.text(), '')
             self.assertEqual(self.page.history_list.count(), 2)
-            for mode in ('dark', 'light'):
-                self.manager.set_mode(mode)
-                field._retheme()
-                self.assertEqual(field.styleSheet(), t('list_search'))
+            field._retheme()
+            self.assertEqual(field.styleSheet(), t('list_search'))
 
     def test_home_title_init_and_retheme_use_palette_without_overrides(self):
         tree = ast.parse((ROOT / 'src/gui/ios/home.py').read_text())
@@ -126,16 +121,14 @@ class UIPolish(unittest.TestCase):
         title = QLabel()
         self.addCleanup(title.deleteLater)
         scope = dict(self=SimpleNamespace(_title=title), t=t)
-        for mode in ('dark', 'light'):
-            self.manager.set_mode(mode)
-            for call in calls:
-                exec(compile(ast.fix_missing_locations(ast.Module(
-                    body=[ast.Expr(value=call)], type_ignores=[])),
-                             'home-title-style', 'exec'), scope)
-                self.assertEqual(title.styleSheet(), t('home_title'))
-                self.assertIn(f'color: {self.manager.colors.text_primary};', title.styleSheet())
-                self.assertIn('background-color: transparent;', title.styleSheet())
-                self.assertNotIn('color: white', title.styleSheet())
+        for call in calls:
+            exec(compile(ast.fix_missing_locations(ast.Module(
+                body=[ast.Expr(value=call)], type_ignores=[])),
+                         'home-title-style', 'exec'), scope)
+            self.assertEqual(title.styleSheet(), t('home_title'))
+            self.assertIn(f'color: {self.manager.colors.text_primary};', title.styleSheet())
+            self.assertIn('background-color: transparent;', title.styleSheet())
+            self.assertNotIn('color: white', title.styleSheet())
 
     def test_collapsible_keyboard_focus_is_visible_even_when_checked(self):
         section = IOSCollapsibleSection('Advanced', expanded=True)
@@ -143,20 +136,18 @@ class UIPolish(unittest.TestCase):
         section.header.setFocusPolicy(Qt.StrongFocus)
         section.show()
         section.activateWindow()
-        for mode in ('dark', 'light'):
-            self.manager.set_mode(mode)
-            section._retheme()
-            section.header.setFocus(Qt.TabFocusReason)
-            APP.processEvents()
-            self.assertTrue(section.header.hasFocus())
-            self.assertTrue(section.header.isChecked())
-            # Qt resolves pseudo-state colors while painting; palette() alone
-            # can still expose the non-focus color on a styled QPushButton.
-            image = section.header.grab().toImage()
-            accent = QColor(self.manager.colors.accent)
-            self.assertTrue(any(image.pixelColor(x, y) == accent
-                                for x in range(image.width())
-                                for y in range(image.height())))
+        section._retheme()
+        section.header.setFocus(Qt.TabFocusReason)
+        APP.processEvents()
+        self.assertTrue(section.header.hasFocus())
+        self.assertTrue(section.header.isChecked())
+        # Qt resolves pseudo-state colors while painting; palette() alone
+        # can still expose the non-focus color on a styled QPushButton.
+        image = section.header.grab().toImage()
+        accent = QColor(self.manager.colors.accent)
+        self.assertTrue(any(image.pixelColor(x, y) == accent
+                            for x in range(image.width())
+                            for y in range(image.height())))
 
 
 if __name__ == '__main__':
