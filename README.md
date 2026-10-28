@@ -286,8 +286,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions and [FORKING.md](FORKIN
 - [Wind0ws11Aero] Co-developer
 - [kik4311] Co-developer
 - [mekabrine][mekabrineDiscord] for icons artwork in new ui.
-- [Eazvy][EazvyGitHub] for interface improvements and the home feature artwork.
-- [Lucide contributors][LucideGitHub] for the interface icons.
+- [oma][EazvyGitHub] for interface improvements.
+- [Lucide contributors][LucideGitHub] for the some interface icons.
 - [Rasmus Andersson][rsmsGitHub] for the Inter font.
 - Translations crowdsourced using [gNugget-i18n repository][i18n]
 - [Prognosticate-X] for [Status Bar research][sbr] on iOS 27
