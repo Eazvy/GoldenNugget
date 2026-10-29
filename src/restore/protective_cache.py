@@ -23,12 +23,34 @@ from typing import Optional
 
 from pymobiledevice3.lockdown import LockdownClient
 
-from src.restore.inject import _validate_sqlite_db
+from src.restore.inject import _is_encrypted_backup, _validate_sqlite_db
 from src.restore.storage import cache_base as _cache_base
 
 _logger = logging.getLogger("GoldenNugget.cache")
 
 CACHE_FILTER_REVISION = 7
+
+
+def _usable_manifest(master: Path) -> bool:
+    """True when a master's Manifest.db is an intact sqlite OR encrypted one.
+
+    An encrypted backup's ``Manifest.db`` is AES-bytes, so it can never be
+    validated as SQLite; ``_is_encrypted_backup`` is the only way to tell a
+    healthy encrypted manifest from a truncated one. It raises when the
+    plist itself is unreadable (a damaged or half-written master), and that
+    must mean "not usable" rather than an exception escaping ``locate`` —
+    a broken cache is supposed to fall back to a full rebuild, not abort the
+    apply.
+    """
+    if _validate_sqlite_db(master / "Manifest.db"):
+        return True
+    try:
+        return _is_encrypted_backup(master)
+    except Exception as error:
+        _logger.warning(
+            f"Protective backup cache master at {master} has an unreadable "
+            f"manifest, rebuilding instead of reusing it: {error}")
+        return False
 
 
 def peek_cache_info(udid: str) -> Optional[dict]:
@@ -134,9 +156,22 @@ class ProtectiveBackupCache:
                 continue
             master = base / "master" / self.udid
             required = ("Manifest.db", "Manifest.plist", "Status.plist")
-            if not all((master / n).is_file() for n in required):
+            # Non-empty, exactly like ``_has_incremental_backup_metadata``:
+            # a full run drops Manifest.plist to a 0-byte placeholder before
+            # the device re-sends it, so an interrupted rebuild must not look
+            # like a usable master.
+            if not all((master / n).is_file() and (master / n).stat().st_size > 0
+                       for n in required):
                 continue
-            if not _validate_sqlite_db(master / "Manifest.db"):
+            # An ENCRYPTED backup's Manifest.db is AES-encrypted, so it never
+            # reads as SQLite. Requiring a readable sqlite here made an
+            # encrypted master permanently unusable: locate() returned None,
+            # the refresh fell back to ``full=True`` and every single apply
+            # re-uploaded the whole device (255k+ files, hours of transfer)
+            # instead of diffing against the master. Mirror
+            # ``list_protective_backups``: either an intact sqlite manifest or
+            # a recognised encrypted manifest is a usable master. (issue #81)
+            if not _usable_manifest(master):
                 continue
             self.base = base
             self.master_root = base / "master"
@@ -209,14 +244,29 @@ class ProtectiveBackupCache:
         valid = self.has_valid_master()
         mode = "incremental" if valid else "full"
         _logger.info(f"Protective backup cache: {mode} refresh for {self.udid}")
-        is_encrypted = await perform_protective_backup(
-            lockdown_client, str(self.master_root), progress_callback,
-            include_photos=include_photos, include_posterboard=include_posterboard,
-            include_keychain=include_keychain,
-            incremental_ok=valid,
-            include_afc_media=include_afc_media,
-            media_root=str(self.media_dir),
-            afc_media_diff=True)
+        try:
+            is_encrypted = await perform_protective_backup(
+                lockdown_client, str(self.master_root), progress_callback,
+                include_photos=include_photos, include_posterboard=include_posterboard,
+                include_keychain=include_keychain,
+                incremental_ok=valid,
+                include_afc_media=include_afc_media,
+                media_root=str(self.media_dir),
+                afc_media_diff=True)
+        except BaseException:
+            # A refresh that dies mid-transfer leaves the master's metadata in
+            # an indeterminate state: a full run has already dropped
+            # Manifest.plist and reset Status.plist to "new", and the payload
+            # tree may hold half-drained placeholders. The next apply must not
+            # diff against that (it would silently reuse a truncated mirror).
+            # Dropping only the marker keeps every payload file on disk but
+            # makes locate() report "no usable master", so the next refresh
+            # rebuilds cleanly.
+            try:
+                self.info_path.unlink(missing_ok=True)
+            except OSError as error:
+                _logger.warning(f"Could not invalidate the cache marker {self.info_path}: {error}")
+            raise
 
         self.base.mkdir(parents=True, exist_ok=True)
         now = int(time.time())

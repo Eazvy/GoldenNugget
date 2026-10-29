@@ -401,7 +401,16 @@ the `ProtectiveBackupCache` to `protective_cache.py` (both re-exported from
   store (`<AppData>/GoldenNugget/backup_cache/master/<udid>`). The master keeps
   a FULL Manifest.db (rows for drained payloads stay) so mobilebackup2 can run
   true incremental refreshes; invalidated by UDID/iOS-version change or by the
-  encryption state flipping. It ALWAYS lives in the persistent store — it is
+  encryption state flipping. Usability is decided by `_usable_manifest()`: an
+  intact SQLite Manifest.db **or** a recognised encrypted one
+  (`_is_encrypted_backup`) — an encrypted Manifest.db is AES bytes and never
+  validates as SQLite, so requiring SQLite made an encrypted master permanently
+  unusable and every apply silently ran a **full** re-upload (255k+ placeholder
+  files instead of a diff; issue #81). A master whose Manifest.plist cannot be
+  read counts as unusable rather than raising out of `locate()`. A refresh that
+  fails or is cancelled deletes the cache marker JSON (payload files stay), so
+  the next apply rebuilds instead of diffing against an indeterminate mirror.
+  It ALWAYS lives in the persistent store — it is
   the only copy of user data between Phase 2 (wipe) and Phase 3 (restore), so
   a temp placement is permanent-loss-on-reboot. A legacy temp base is still
   scanned by `locate()` for migration. The whole location is relocatable:
@@ -426,6 +435,25 @@ the `ProtectiveBackupCache` to `protective_cache.py` (both re-exported from
   PosterBoard DB.
   (Note: the module's own doc-comment at `protective.py:212-220` claims
   ConfigurationProfiles was reverted, but the code still keeps it.)
+  - **Progress labels** come from `backup_category_for()` (module level, so
+    the mapping is testable). It normalises the upload name through
+    `_device_tree_name()`, so iOS 26's domain-qualified names
+    (`CameraRollDomain/Media/…`) and iOS 27's raw tree (`/.b/<n>/Media/…`)
+    land in the same category. Without the tree normalisation every iOS 27
+    upload fell through to the generic "Device data" label — the phrase a
+    stalled apply appeared to be frozen on (issue #81).
+  - **A log heartbeat** (`Backup upload heartbeat: seen=… kept=…`) fires at
+    most once a minute from the filter, so a wedged transfer is
+    distinguishable from a slow one instead of the log simply stopping.
+  - **A DeviceLink silence budget** (`install_recv_timeout()` in
+    `device_link_adapter.py`) wraps `DeviceLink._recvall` in
+    `asyncio.wait_for` — the single choke point for everything the device
+    sends. Silence for `DEFAULT_RECV_TIMEOUT_SECS` (900s, override with
+    `GOLDENNUGGET_BACKUP_STALL_SECS`) raises `DeviceLinkStalled` instead of
+    blocking in `readexactly` forever. Its message deliberately avoids the
+    connection-error keywords, so `is_connection_error()` does not replay the
+    whole backup as a transient link flap. The negotiated mode/root/encryption
+    state and the budget are logged before `mb.backup`.
 - `make_protective_working_copy()` — hardlink clone (metadata real-copied);
   pruning never corrupts the master. Used by the manual restore tools
   (`restore_cache.py`, `apply_worker.py`).
@@ -626,11 +654,12 @@ Local transfer/inspection modules:
   be unchecked out locally).
 - **Kill switches / env**: `GOLDENNUGGET_NO_BACKUP_CACHE`,
   `GOLDENNUGGET_SKIP_PB_BACKUP`, `GOLDENNUGGET_MIN_FREE_GB`,
-  `GOLDENNUGGET_CACHE_REFRESH_SECS`,
+  `GOLDENNUGGET_CACHE_REFRESH_SECS`, `GOLDENNUGGET_BACKUP_STALL_SECS`,
   `GOLDENNUGGET_PB_SPARSE`, `GOLDENNUGGET_KEEP_SPARSE`, `GOLDENNUGGET_LOG_FILE`.
 - **Testing**: offline regression for the backup cache in
-  `tools/test_protective_cache.py` and cache placement in
-  `tools/test_cache_placement.py` (no device needed); smoke run =
+  `tools/test_protective_cache.py`, cache placement in
+  `tools/test_cache_placement.py` and the backup progress labels in
+  `tools/test_backup_category.py` (no device needed); smoke run =
   `QT_QPA_PLATFORM=offscreen python main_app.py --test-mode`. `tools/` also
   holds device operation utilities (backups, syslog capture, sparse inspection).
 

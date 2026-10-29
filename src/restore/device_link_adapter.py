@@ -1,8 +1,81 @@
 """Idempotent compatibility adapters for the pinned mobilebackup2 protocol."""
+import asyncio
+import os
 import shutil
 import sys
-from pymobiledevice3.exceptions import NotEnoughDiskSpaceError
+from pymobiledevice3.exceptions import NotEnoughDiskSpaceError, PyMobileDevice3Exception
 from src.utils.log_util import log_info, log_warn, log_debug
+
+# How long the device may stay completely silent in the middle of a transfer
+# before the backup is abandoned. A healthy DeviceLink answers within seconds
+# (the penalty charge is per message or per file); a silent device leaves the
+# host blocked in ``readexactly`` forever, which is exactly how an apply used
+# to hang on "Device data… 46%" with no error and a log that simply stopped
+# (issue #81). Generous on purpose: one huge payload (a multi-GB ProRes video)
+# is read with a single large ``readexactly``, so this is a silence budget,
+# not a file budget.
+DEFAULT_RECV_TIMEOUT_SECS = 900.0
+RECV_TIMEOUT_ENV = "GOLDENNUGGET_BACKUP_STALL_SECS"
+
+
+def recv_timeout_secs() -> float:
+    """Silence budget for one DeviceLink read, overridable for slow setups."""
+    try:
+        value = float(os.environ.get(RECV_TIMEOUT_ENV, DEFAULT_RECV_TIMEOUT_SECS))
+    except ValueError:
+        return DEFAULT_RECV_TIMEOUT_SECS
+    return value if value > 0 else DEFAULT_RECV_TIMEOUT_SECS
+
+
+class DeviceLinkStalled(PyMobileDevice3Exception):
+    """The device stopped sending data mid-transfer.
+
+    Raised instead of blocking forever on a read that will never complete.
+    Deliberately worded without the connection-error keywords
+    (``connection``/``terminated``/``incomplete``) so ``is_connection_error``
+    does not mistake a dead transfer for a transient link flap and silently
+    replay the whole backup.
+    """
+
+
+def install_recv_timeout(timeout_secs: float = None) -> None:
+    """Bound every DeviceLink read so a silent device cannot hang an apply.
+
+    ``DeviceLink._recvall`` is the single choke point for everything the device
+    sends (plists, file chunks, status codes). Wrapping it turns "the device
+    never answers" into a ``DeviceLinkStalled`` after the silence budget,
+    which the apply reports as an actionable error and the user can retry --
+    instead of a progress bar frozen at the last percentage with nothing in
+    the log.
+    """
+    timeout = recv_timeout_secs() if timeout_secs is None else timeout_secs
+    try:
+        from pymobiledevice3.services.device_link import DeviceLink
+    except Exception as e:  # pragma: no cover - defensive
+        log_debug(f"DeviceLink recv-timeout hook not installed: {e}")
+        return
+    if getattr(DeviceLink, "_gn_recv_timeout_installed", False):
+        return
+    original_recvall = DeviceLink._recvall
+
+    async def _recvall(self, size):
+        budget = getattr(self, "_gn_recv_timeout", None) or timeout
+        try:
+            return await asyncio.wait_for(original_recvall(self, size), timeout=budget)
+        except asyncio.TimeoutError as error:
+            minutes = max(1, round(budget / 60))
+            raise DeviceLinkStalled(
+                "The iPhone stopped sending data during a device transfer "
+                f"(no data for {minutes} min), so the operation was stopped "
+                "instead of waiting forever. Unlock the iPhone, keep the "
+                "screen awake, reconnect the cable, then try again."
+            ) from error
+
+    DeviceLink._recvall = _recvall
+    DeviceLink._gn_recv_timeout_installed = True
+    log_info(f"DeviceLink read silence budget: {timeout:g}s "
+             f"({RECV_TIMEOUT_ENV} overrides)")
+
 
 def install_verbose(disk_space_message) -> None:
     """Log free-space traffic and answer purge requests without aborting the link.

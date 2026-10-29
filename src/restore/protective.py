@@ -204,6 +204,7 @@ from src.utils.async_disk import ensure_thread_executor
 ensure_thread_executor()
 
 from src.utils.log_util import log_info, log_warn, log_error, log_debug
+from .device_link_adapter import recv_timeout_secs
 
 # --- DeviceLink protocol constants (from pymobiledevice3.services.device_link) ---
 
@@ -483,6 +484,42 @@ def _posterboard_db_match(device_name: str) -> bool:
     return POSTERBOARD_DB_NAME in name
 
 
+def backup_category_for(device_name: str) -> BackupStatus:
+    """Progress label for the kind of data a device upload belongs to.
+
+    Only ever a label — it says what a long, quiet backup is working on. The
+    name shapes differ per iOS release: iOS 26 sends domain-qualified names
+    (``CameraRollDomain/Media/...``) while iOS 27+ sends the raw filesystem
+    tree (``/.b/<n>/Media/...``). ``_device_tree_name`` normalises both, so a
+    physical ``Media/`` or ``Keychains/`` root lands in the same category as
+    its domain form; without that every iOS 27 upload fell through to the
+    generic "Device data", which is the label a stalled apply appeared to sit
+    on forever.
+    """
+    low = _device_tree_name(device_name or "").lower()
+
+    def under(*roots: str) -> bool:
+        return any(low == root or low.startswith(f"{root}/") for root in roots)
+
+    if "keychaindomain" in low or under("keychains"):
+        return BackupStatus(QCoreApplication.translate("Nugget", "Keychain"), "keychain")
+    if "messagesdomain" in low or under("library/messages"):
+        return BackupStatus(QCoreApplication.translate("Nugget", "Messages"), "messages")
+    if "camerarolldomain" in low or "mediadomain" in low or under("media"):
+        return BackupStatus(QCoreApplication.translate("Nugget", "Photos and videos"), "photos")
+    if "accounts" in low or "appleaccount" in low:
+        return BackupStatus(QCoreApplication.translate("Nugget", "Apple account"), "account")
+    if "springboard" in low or "home screen" in low:
+        return BackupStatus(QCoreApplication.translate("Nugget", "Home screen"), "home")
+    if "shortcuts" in low:
+        return BackupStatus(QCoreApplication.translate("Nugget", "Shortcuts"), "shortcuts")
+    if "poster" in low:
+        return BackupStatus(QCoreApplication.translate("Nugget", "Wallpaper data"), "wallpaper")
+    if "preferences" in low or "configurationprofiles" in low:
+        return BackupStatus(QCoreApplication.translate("Nugget", "Settings"), "settings")
+    return BackupStatus(QCoreApplication.translate("Nugget", "Device data"), "backup")
+
+
 def backup_disk_space_message(path, available_bytes=None) -> str:
     """Describe a host-side backup space refusal using the actual destination."""
     if available_bytes is None:
@@ -512,8 +549,14 @@ def _install_device_link_contents_shim():
     install_contents()
 
 
+def _install_device_link_recv_timeout():
+    from .device_link_adapter import install_recv_timeout
+    install_recv_timeout()
+
+
 _install_device_link_verbose()
 _install_device_link_contents_shim()
+_install_device_link_recv_timeout()
 
 
 def is_protective_device_file(device_name: str, include_photos: bool = True,
@@ -769,30 +812,11 @@ async def perform_protective_backup(
     _pb_names_to_db: list = []
     _totals = {"seen": 0, "kept": 0, "containers": 0}
     _last_category = [None]
-
-    def _category_for(name: str) -> str:
-        low = name.lower()
-        if "keychaindomain" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Keychain"), "keychain")
-        if "messagesdomain" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Messages"), "messages")
-        if "camerarolldomain" in low or "mediadomain" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Photos and videos"), "photos")
-        if "accounts" in low or "appleaccount" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Apple account"), "account")
-        if "springboard" in low or "home screen" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Home screen"), "home")
-        if "shortcuts" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Shortcuts"), "shortcuts")
-        if "poster" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Wallpaper data"), "wallpaper")
-        if "preferences" in low or "configurationprofiles" in low:
-            return BackupStatus(QCoreApplication.translate("Nugget", "Settings"), "settings")
-        return BackupStatus(QCoreApplication.translate("Nugget", "Device data"), "backup")
+    _last_heartbeat = [time.monotonic()]
 
     def _filter_callback(backup_file):
         name = backup_file.device_name or ""
-        category = _category_for(name)
+        category = backup_category_for(name)
         if category != _last_category[0]:
             _last_category[0] = category
             if progress_callback:
@@ -811,6 +835,15 @@ async def perform_protective_backup(
         if include_posterboard and ("poster" in low or POSTERBOARD_DB_NAME.lower() in low):
             _pb_names_to_db.append((name, keep))
             log_debug(f"PB filter {'KEEP' if keep else 'drop'}: {name}")
+        # A heartbeat keeps the session log informative during a long silent
+        # stretch: without it a wedged transfer and a slow one look identical
+        # (the log stops either way until the DeviceLink read timeout fires).
+        now = time.monotonic()
+        if now - _last_heartbeat[0] >= 60:
+            _last_heartbeat[0] = now
+            log_info(f"Backup upload heartbeat: seen={_totals['seen']} "
+                     f"kept={_totals['kept']} "
+                     f"container_paths={_totals['containers']}")
         return keep
 
     is_encrypted = False
@@ -833,6 +866,12 @@ async def perform_protective_backup(
                 progress_callback("Using existing backup encryption...")
             else:
                 progress_callback("Creating protective backup (unencrypted)...")
+            # Name the mode explicitly: "the cache did nothing" reports all
+            # traced back to an encrypted master that was silently rejected by
+            # locate(), so every apply ran a full backup instead of a diff.
+            log_info(f"Protective backup mode: {'incremental' if incremental_ok else 'full'} "
+                     f"| root={backup_root} | encrypted={is_encrypted} "
+                     f"| silence budget={recv_timeout_secs():g}s")
             try:
                 await mb.backup(full=not incremental_ok, backup_directory=backup_root,
                                 progress_callback=progress_callback,

@@ -20,6 +20,7 @@ from src.restore.protective import (
     make_protective_working_copy,
     make_restore_view,
 )
+from src.restore.protective_cache import CACHE_FILTER_REVISION
 
 UDID = "00008101-TESTUDID"
 PASS = 0
@@ -85,7 +86,9 @@ def main():
     import json
     base.mkdir(parents=True, exist_ok=True)
     with open(cache.info_path, "w") as f:
-        json.dump({"udid": UDID, "product_version": "27.0"}, f)
+        json.dump({"udid": UDID, "product_version": "27.0",
+                   "filter_revision": CACHE_FILTER_REVISION,
+                   "encrypted": False}, f)
     check("master valid after marker", cache.has_valid_master())
 
     other = ProtectiveBackupCache(UDID, product_version="26.2")
@@ -198,6 +201,69 @@ def main():
     check("master manifest survives the view being dropped",
           "Library/SMS/sms.db" in master_rels)
 
+    # --- an ENCRYPTED master is a usable master -------------------------
+    # Regression: locate() required the master's Manifest.db to read as
+    # SQLite, but an encrypted backup's Manifest.db is AES-encrypted. With
+    # "Encrypted Backups" on, the cache therefore NEVER matched, every apply
+    # silently ran a full backup (255k+ files re-uploaded) and the fast cache
+    # did nothing at all.
+    enc_base = tmp / "encrypted_cache"
+    enc_udid = "00008101-ENCRYPTED"
+    enc_device = enc_base / "master" / enc_udid
+    enc_device.mkdir(parents=True)
+    (enc_device / "Manifest.db").write_bytes(bytes(range(256)) * 16)  # AES blocks, not sqlite
+    (enc_device / "Manifest.plist").write_bytes(plistlib.dumps({"IsEncrypted": True}))
+    (enc_device / "Status.plist").write_bytes(plistlib.dumps({"BackupState": "finished"}))
+    import json
+    (enc_base / f"{enc_udid}.json").write_text(json.dumps({
+        "udid": enc_udid, "product_version": "27.0", "filter_revision": CACHE_FILTER_REVISION,
+        "encrypted": True, "created_ts": 1}), encoding="utf-8")
+
+    enc_cache = _cache_in(enc_base, enc_udid, encrypted=True)
+    check("encrypted master is usable", enc_cache.has_valid_master())
+    check("encrypted master keeps its encryption flag",
+          bool(enc_cache.locate()["info"].get("encrypted")))
+    check("a flipped encryption state invalidates the master",
+          not _cache_in(enc_base, enc_udid, encrypted=False).has_valid_master())
+
+    # a damaged Manifest.plist cannot prove the manifest is healthy: locate()
+    # must report "no usable master" instead of raising out of the apply
+    (enc_device / "Manifest.plist").write_bytes(b"not a plist")
+    check("an unreadable manifest is not a usable master",
+          not enc_cache.has_valid_master())
+    (enc_device / "Manifest.plist").write_bytes(plistlib.dumps({"IsEncrypted": True}))
+
+    # a full run leaves Manifest.plist as a 0-byte placeholder before the
+    # device re-sends it: an interrupted rebuild must not be reused
+    (enc_device / "Manifest.plist").write_bytes(b"")
+    check("interrupted rebuild is not a usable master",
+          not enc_cache.has_valid_master())
+    (enc_device / "Manifest.plist").write_bytes(plistlib.dumps({"IsEncrypted": True}))
+
+    # --- a failed refresh invalidates the marker ------------------------
+    # The master's metadata is indeterminate after a dead transfer, so the
+    # next apply must rebuild instead of diffing against a broken mirror.
+    import asyncio
+    from src.restore import protective as _protective
+
+    original_backup = _protective.perform_protective_backup
+
+    async def _failing_backup(*_args, **_kwargs):
+        raise RuntimeError("simulated stall")
+
+    _protective.perform_protective_backup = _failing_backup
+    try:
+        try:
+            asyncio.run(enc_cache.refresh(None))
+        except RuntimeError:
+            pass
+        check("failed refresh drops the cache marker",
+              not (enc_base / f"{enc_udid}.json").exists())
+        check("failed refresh keeps the payload files",
+              (enc_device / "Manifest.db").is_file())
+    finally:
+        _protective.perform_protective_backup = original_backup
+
     print(f"\nALL {PASS} CHECKS PASSED")
 
 
@@ -213,6 +279,15 @@ def _file_id_for(domain, rel_path) -> str:
     """The manifest's fileID for a row (sha1 of domain-relativePath)."""
     import hashlib
     return hashlib.sha1(f"{domain}-{rel_path}".encode()).hexdigest()
+
+
+def _cache_in(base: Path, udid: str, encrypted: bool, version: str = "27.0") -> ProtectiveBackupCache:
+    """Point a cache at exactly one store so ``locate()`` cannot see another."""
+    cache = ProtectiveBackupCache(udid, product_version=version, encrypted=encrypted)
+    cache._temp_base = base / "absent-temp"
+    cache._persist_base = base
+    cache._set_home(base)
+    return cache
 
 
 if __name__ == "__main__":
