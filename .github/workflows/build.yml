@@ -1,4 +1,4 @@
-name: Build Nugget
+name: Build GoldenNugget
 
 on:
   workflow_dispatch:
@@ -127,18 +127,18 @@ jobs:
           # artifact at the common parent, and a file outside dist/ would nest
           # the ZIP and DMG under dist/ where the smoke test cannot find them.
           cp macOS-dependencies.txt dist/
-          QT_QPA_PLATFORM=offscreen dist/Nugget.app/Contents/MacOS/Nugget tools/smoke_macos.py > smoke.log 2>&1
+          QT_QPA_PLATFORM=offscreen dist/GoldenNugget.app/Contents/MacOS/GoldenNugget tools/smoke_macos.py > smoke.log 2>&1
           cat smoke.log
           grep -q 'MACOS_SMOKE_OK' smoke.log
       - name: Upload macOS failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: Nugget_macOS_diagnostics
+          name: GoldenNugget_macOS_diagnostics
           path: |
             dist/macOS-validation.json
             dist/macOS-validation.stderr.log
-            dist/Nugget-macOS-Universal.zip
+            dist/GoldenNugget-macOS-Universal.zip
             macOS-dependencies.txt
             smoke.log
           if-no-files-found: ignore
@@ -146,10 +146,10 @@ jobs:
       - name: Upload macOS Universal2
         uses: actions/upload-artifact@v6
         with:
-          name: Nugget_macOS_Universal2
+          name: GoldenNugget_macOS_Universal2
           path: |
-            dist/Nugget-macOS-Universal2.dmg
-            dist/Nugget-macOS-Universal.zip
+            dist/GoldenNugget-macOS-Universal2.dmg
+            dist/GoldenNugget-macOS-Universal.zip
             dist/macOS-validation.json
             dist/SHA256SUMS-macOS.txt
             dist/macOS-dependencies.txt
@@ -180,8 +180,8 @@ jobs:
       - name: Upload Windows
         uses: actions/upload-artifact@v6
         with:
-          name: Nugget_Windows
-          path: dist/Nugget
+          name: GoldenNugget_Windows
+          path: dist/GoldenNugget
           if-no-files-found: error
 
   build-linux:
@@ -227,8 +227,8 @@ jobs:
       - name: Upload Linux
         uses: actions/upload-artifact@v6
         with:
-          name: Nugget_Linux
-          path: dist/Nugget
+          name: GoldenNugget_Linux
+          path: dist/GoldenNugget
           if-no-files-found: error
 
   build-linux-arm:
@@ -274,6 +274,6 @@ jobs:
       - name: Upload Linux ARM
         uses: actions/upload-artifact@v6
         with:
-          name: Nugget_Linux_aarch64
-          path: dist/Nugget
+          name: GoldenNugget_Linux_aarch64
+          path: dist/GoldenNugget
           if-no-files-found: error

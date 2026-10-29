@@ -31,12 +31,12 @@ delegates to `src.cli.main`, keeping the PyInstaller entry script unchanged.
 It dispatches subcommands then falls through to the GUI:
 
 ```
-Nugget                          launch the GUI
-Nugget apply-wallpaper [TENDIE] [--udid UDID] [--list]
-Nugget restore-cache [...opts]  restore protective backup (cache master or live run; --source auto|cache|live; Phase-3 recovery)
-Nugget restore [same as above]  alias for restore-cache
-Nugget skip-setup [--udid]      mark all iOS setup panes completed
-Nugget -m <module>| <script>.py  backward-compatible dispatcher
+GoldenNugget                          launch the GUI
+GoldenNugget apply-wallpaper [TENDIE] [--udid UDID] [--list]
+GoldenNugget restore-cache [...opts]  restore protective backup (cache master or live run; --source auto|cache|live; Phase-3 recovery)
+GoldenNugget restore [same as above]  alias for restore-cache
+GoldenNugget skip-setup [--udid]      mark all iOS setup panes completed
+GoldenNugget -m <module>| <script>.py  backward-compatible dispatcher
 ```
 
 `main_app.py` is the underlying GUI/CLI dispatcher:
@@ -80,7 +80,7 @@ it silently, and the frozen app dies at startup with `ImportError: DLL load
 failed while importing _rust`. `compile.py` finds the DLL (in `abi3t-compat\`
 or the install root, via `sys.base_prefix`/`sys.executable`), adds it with
 `--add-binary ...;.` so it lands beside `python3XX.dll`/`python3.dll`, and
-verifies it made it into `dist/Nugget`. At runtime CPython's
+verifies it made it into `dist/GoldenNugget`. At runtime CPython's
 `_Py_CheckPython3t()` (`Python/dynload_win.c`) preloads `python3t.dll` from
 that directory, so the `_rust.pyd` import resolves. If the DLL cannot be found
 while the installed cryptography needs it, the build fails loudly instead of

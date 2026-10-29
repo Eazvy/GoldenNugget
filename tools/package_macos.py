@@ -12,7 +12,7 @@ from PyInstaller.utils.osx import set_dylib_dependency_paths, sign_binary
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / 'dist'
-APP = DIST / 'Nugget.app'
+APP = DIST / 'GoldenNugget.app'
 
 
 def run(*args):
@@ -52,18 +52,18 @@ def main():
     print(validation.stderr, end='', file=sys.stderr, flush=True)
     validation.check_returncode()
     json.loads(validation.stdout)
-    archive = DIST / 'Nugget-macOS-Universal.zip'
+    archive = DIST / 'GoldenNugget-macOS-Universal.zip'
     run('ditto', '-c', '-k', '--keepParent', APP, archive)
-    dmg = DIST / 'Nugget-macOS-Universal2.dmg'
+    dmg = DIST / 'GoldenNugget-macOS-Universal2.dmg'
     with tempfile.TemporaryDirectory() as directory:
         staging = Path(directory) / 'staging'
         staging.mkdir()
-        run('ditto', APP, staging / 'Nugget.app')
+        run('ditto', APP, staging / 'GoldenNugget.app')
         (staging / 'Applications').symlink_to('/Applications')
         (staging / 'README.txt').write_text(
             'GoldenNugget — macOS 14.4 Sonoma or later.\n'
             'Universal2: Intel and Apple Silicon.\n'
-            'Drag Nugget.app into Applications.\n'
+            'Drag GoldenNugget.app into Applications.\n'
             'Ad-hoc signed; not notarized.\n')
         shutil.copy2(ROOT / 'src/qt/dmg_icon.icns', staging / '.VolumeIcon.icns')
         # hdiutil create has no -icon option. Set the custom icon flag on a
@@ -82,9 +82,9 @@ def main():
         run('hdiutil', 'verify', dmg)
         run('hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mounted, dmg)
         try:
-            if not (mounted / 'Nugget.app').is_dir() or (mounted / 'Nugget.app').is_symlink():
+            if not (mounted / 'GoldenNugget.app').is_dir() or (mounted / 'GoldenNugget.app').is_symlink():
                 raise RuntimeError('DMG does not contain a real app bundle')
-            run('codesign', '--verify', '--deep', '--strict', mounted / 'Nugget.app')
+            run('codesign', '--verify', '--deep', '--strict', mounted / 'GoldenNugget.app')
         finally:
             run('hdiutil', 'detach', mounted)
     (DIST / 'SHA256SUMS-macOS.txt').write_text(''.join(

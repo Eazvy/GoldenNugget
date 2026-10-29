@@ -34,7 +34,7 @@ StringFileInfo(
     StringStruct(u'FileVersion', u'9.7.3'),
     StringStruct(u'InternalName', u'gNugget'),
     StringStruct(u'LegalCopyright', u'Copyright (c) 2026 awesomenull'),
-    StringStruct(u'OriginalFilename', u'Nugget.exe'),
+    StringStruct(u'OriginalFilename', u'GoldenNugget.exe'),
     StringStruct(u'ProductName', u'GoldenNugget'),
     StringStruct(u'ProductVersion', u'9.7.3')])
   ]),

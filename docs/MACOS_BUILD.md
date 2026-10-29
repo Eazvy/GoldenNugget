@@ -22,9 +22,9 @@ universal SSL/zstd libraries; architecture-specific OpenCV codec libraries
 keep their original paths. Any dependency above macOS 14.4 aborts packaging;
 changing only Info.plist or a Mach-O load command is never a compatibility fix.
 
-Artifacts: `Nugget-macOS-Universal2.dmg`, `Nugget-macOS-Universal.zip`, validation
+Artifacts: `GoldenNugget-macOS-Universal2.dmg`, `GoldenNugget-macOS-Universal.zip`, validation
 JSON, dependency versions and SHA-256 checksums. Both archives contain a real
-`Nugget.app`; the DMG also contains an Applications shortcut. Bundles are
+`GoldenNugget.app`; the DMG also contains an Applications shortcut. Bundles are
 ad-hoc signed and are not notarized. Frozen GUI/crypto smoke tests run on Intel
 and Apple Silicon (macOS 15 runners); they do not constitute a runtime test
 on macOS 14.4 itself.
