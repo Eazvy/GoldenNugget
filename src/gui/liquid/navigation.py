@@ -5,8 +5,6 @@ from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QSize,
-    QPointF,
-    QRectF,
     Qt,
     QVariantAnimation,
     Signal,
@@ -58,7 +56,7 @@ class BackCapsule(LiquidButton):
             self.setMinimumWidth(CONTROLS_TRAILING_INSET)
         else:
             self.setFixedHeight(36)
-        self.setStyleSheet('QPushButton#liquidButton { background:transparent; border:none; padding:4px 16px; font-size:15px; font-weight:600; text-align:center; }')
+        self.setStyleSheet('QPushButton#liquidButton { background:transparent; border:none; padding:3px 12px; font-size:14px; font-weight:600; text-align:center; }')
 
     def fit_to_label(self):
         width=max(96,self.sizeHint().width())
@@ -74,26 +72,6 @@ class BackCapsule(LiquidButton):
     def setText(self,text):
         super().setText(text)
         self.fit_to_label()
-
-    def paintEvent(self,event):
-        painter=QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        colors=ColorThemeManager.instance().colors
-        amount=max(0.0,min(1.0,self.hover+self.wave))
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(255,255,255,round(10+20*amount)))
-        painter.drawRoundedRect(QRectF(self.rect()).adjusted(2,2,-2,-2),14,14)
-        painter.setFont(self.font())
-        painter.setPen(QColor(colors.text_primary))
-        bounds=painter.fontMetrics().tightBoundingRect(self.text())
-        icon_size=16
-        gap=8
-        width=icon_size+gap+bounds.width()
-        left=(self.width()-width)/2
-        center=self.height()/2
-        self.icon().paint(painter,round(left),round(center-icon_size/2),icon_size,icon_size)
-        painter.drawText(QPointF(left+icon_size+gap-bounds.left(),center-bounds.center().y()),self.text())
-
 
 class LiquidNavBar(GlassPanel):
     """Shared page header, painted as one surface with the window.
